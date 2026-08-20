@@ -1,6 +1,8 @@
 "use client";
 
 import { AppShell } from "@/components/compras/AppShell";
+import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
+import type { Sessao } from "@/lib/auth/sessao";
 import { loadRascunho, loteTotal, money, nomeSecretaria, processoStatusLabels, saveRascunho, statusTone, type Processo } from "@/lib/compras";
 import { ArrowUpRight, BellRing, CalendarClock, CheckCircle2, ClipboardList, FileText, Plus, Search, Timer } from "lucide-react";
 import Link from "next/link";
@@ -22,7 +24,7 @@ function parseDataBr(valor: string) {
   return new Date(ano, (mes || 1) - 1, dia || 1).getTime();
 }
 
-export function CentralCompras({ processos }: { processos: Processo[] }) {
+export function CentralCompras({ processos, sessao }: { processos: Processo[]; sessao: Sessao }) {
   const [busca, setBusca] = useState("");
   const [solicitacoes, setSolicitacoes] = useState<unknown[]>([]);
   const [nota, setNota] = useState("");
@@ -76,14 +78,16 @@ export function CentralCompras({ processos }: { processos: Processo[] }) {
   };
 
   return (
-    <AppShell>
+    <AppShell sessao={sessao}>
       <div className="daddus-page-heading daddus-page-heading-actions">
         <div>
           <span className="daddus-overline">Operacao municipal</span>
           <h2>Central do Setor de Compras</h2>
           <p>Monitore solicitacoes, processos e prazos da prefeitura.</p>
         </div>
-        <Link href="/painel/secretario/solicitacoes" className="daddus-primary-button"><Plus size={16} /> Nova solicitacao</Link>
+        {podeAbrirSolicitacao(sessao.papel) && (
+          <Link href="/painel/secretario/solicitacoes" className="daddus-primary-button"><Plus size={16} /> Nova solicitacao</Link>
+        )}
       </div>
 
       {solicitacoes.length > 0 && (

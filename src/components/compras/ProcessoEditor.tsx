@@ -2,6 +2,8 @@
 
 import { ExportLicitacaoPDF } from "@/components/ExportLicitacaoPDF";
 import { AppShell } from "@/components/compras/AppShell";
+import { podeEditarLote, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
+import type { Sessao } from "@/lib/auth/sessao";
 import {
   itemAverage,
   itemTotalQuantity,
@@ -25,12 +27,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-// Ate a etapa de autenticacao, a secretaria do usuario logado e fixa.
-const currentSecretaria: Secretaria = "administracao";
 const quoteKeys = ["bnc", "pncp", "mercado"] as const;
 
-export function ProcessoEditor({ processo, prefeitura }: { processo: Processo; prefeitura: PrefeituraConfig }) {
+export function ProcessoEditor({ processo, prefeitura, sessao }: { processo: Processo; prefeitura: PrefeituraConfig; sessao: Sessao }) {
   const router = useRouter();
+  const podeEditar = podeEditarLote(sessao.papel);
+  const editaTudo = podeEditarTodasAsColunas(sessao.papel);
+  // Secretario mexe apenas na coluna da propria secretaria; compras, em todas.
+  const minhaSecretaria: Secretaria | null = editaTudo ? null : sessao.secretariaChave;
+  const colunaEditavel = (chave: Secretaria) => podeEditar && (editaTudo || chave === minhaSecretaria);
   const [items, setItems] = useState<LoteItem[]>(processo.itens);
   const [notes, setNotes] = useState(processo.notas);
   const [referenceMessage, setReferenceMessage] = useState("");
@@ -103,7 +108,7 @@ export function ProcessoEditor({ processo, prefeitura }: { processo: Processo; p
   const itensIncompletos = items.filter((item) => quotesFilled(item) < 3).length;
 
   return (
-    <AppShell>
+    <AppShell sessao={sessao}>
       <div className="daddus-page-heading daddus-page-heading-actions">
         <div>
           <Link href="/painel/compras" className="daddus-back-link"><ArrowLeft size={15} /> Voltar para processos</Link>
@@ -113,9 +118,11 @@ export function ProcessoEditor({ processo, prefeitura }: { processo: Processo; p
         </div>
         <div className="daddus-heading-actions">
           <ExportLicitacaoPDF items={items} prefeitura={prefeitura} processo={processo} notas={notes} />
-          <button className="daddus-primary-button" type="button" onClick={salvarLote} disabled={salvando}>
-            <Check size={16} /> {salvando ? "Salvando..." : "Salvar lote"}
-          </button>
+          {podeEditar && (
+            <button className="daddus-primary-button" type="button" onClick={salvarLote} disabled={salvando}>
+              <Check size={16} /> {salvando ? "Salvando..." : "Salvar lote"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -131,10 +138,12 @@ export function ProcessoEditor({ processo, prefeitura }: { processo: Processo; p
           <strong>Itens do lote</strong>
           <span>{items.length} {items.length === 1 ? "item" : "itens"} · Valor estimado {money(loteTotal(items))}</span>
         </div>
-        <div className="daddus-heading-actions">
-          <button className="daddus-secondary-button" type="button" onClick={searchReference}><Search size={15} /> Buscar no Portal / PNCP</button>
-          <button className="daddus-secondary-button" type="button" onClick={addItem}><Plus size={15} /> Adicionar item</button>
-        </div>
+        {editaTudo && (
+          <div className="daddus-heading-actions">
+            <button className="daddus-secondary-button" type="button" onClick={searchReference}><Search size={15} /> Buscar no Portal / PNCP</button>
+            <button className="daddus-secondary-button" type="button" onClick={addItem}><Plus size={15} /> Adicionar item</button>
+          </div>
+        )}
       </div>
 
       {erro && <div className="daddus-inline-warning"><AlertTriangle size={16} /> {erro}</div>}
@@ -149,7 +158,13 @@ export function ProcessoEditor({ processo, prefeitura }: { processo: Processo; p
       <div className="daddus-editor-card">
         <div className="daddus-permission-note">
           <span className="daddus-info-icon">i</span>
-          <span>Voce esta editando como <strong>Secretaria de {secretariaLabels[currentSecretaria]}</strong>. As quantidades das demais secretarias ficam bloqueadas para preservar a autoria.</span>
+          {!podeEditar ? (
+            <span>Seu perfil acompanha este lote em <strong>somente leitura</strong>.</span>
+          ) : editaTudo ? (
+            <span>Voce edita o lote como <strong>Setor de Compras</strong>: todas as colunas e as cotacoes estao liberadas.</span>
+          ) : (
+            <span>Voce esta editando como <strong>Secretaria de {minhaSecretaria ? secretariaLabels[minhaSecretaria] : "-"}</strong>. As quantidades das demais secretarias ficam bloqueadas para preservar a autoria.</span>
+          )}
           <ChevronDown size={15} />
         </div>
         <div className="daddus-table-wrap">
@@ -173,8 +188,8 @@ export function ProcessoEditor({ processo, prefeitura }: { processo: Processo; p
               {items.map((item) => (
                 <tr key={item.id}>
                   <td className="item-number">{item.item}</td>
-                  <td><textarea className="cell-textarea" value={item.especificacao} placeholder="Descreva o item" onChange={(event) => updateText(item.id, "especificacao", event.target.value)} /></td>
-                  <td><input className="cell-input unit" value={item.unidade} onChange={(event) => updateText(item.id, "unidade", event.target.value)} /></td>
+                  <td><textarea className="cell-textarea" value={item.especificacao} placeholder="Descreva o item" disabled={!editaTudo} onChange={(event) => updateText(item.id, "especificacao", event.target.value)} /></td>
+                  <td><input className="cell-input unit" value={item.unidade} disabled={!editaTudo} onChange={(event) => updateText(item.id, "unidade", event.target.value)} /></td>
                   {secretariaKeys.map((key) => (
                     <td key={key}>
                       <input
@@ -182,21 +197,21 @@ export function ProcessoEditor({ processo, prefeitura }: { processo: Processo; p
                         type="number"
                         min="0"
                         value={item.quantidades[key] || ""}
-                        disabled={key !== currentSecretaria}
+                        disabled={!colunaEditavel(key)}
                         onChange={(event) => updateQuantity(item.id, key, event.target.value)}
-                        title={key !== currentSecretaria ? `Somente a Secretaria de ${secretariaLabels[key]} pode editar` : undefined}
+                        title={colunaEditavel(key) ? undefined : `Somente a Secretaria de ${secretariaLabels[key]} pode editar`}
                       />
                     </td>
                   ))}
                   <td className="calculated">{itemTotalQuantity(item)}</td>
                   {quoteKeys.map((quote) => (
                     <td key={quote}>
-                      <input className="cell-input money" type="number" min="0" step="0.01" value={item.cotacoes[quote] || ""} onChange={(event) => updateQuote(item.id, quote, event.target.value)} />
+                      <input className="cell-input money" type="number" min="0" step="0.01" value={item.cotacoes[quote] || ""} disabled={!editaTudo} onChange={(event) => updateQuote(item.id, quote, event.target.value)} />
                     </td>
                   ))}
                   <td className="calculated">{money(itemAverage(item))}</td>
                   <td className="calculated total">{money(itemAverage(item) * itemTotalQuantity(item))}</td>
-                  <td><button type="button" className="table-icon-button" aria-label={`Remover item ${item.item}`} onClick={() => removeItem(item.id)}><Trash2 size={15} /></button></td>
+                  <td>{editaTudo && <button type="button" className="table-icon-button" aria-label={`Remover item ${item.item}`} onClick={() => removeItem(item.id)}><Trash2 size={15} /></button>}</td>
                 </tr>
               ))}
               {items.length === 0 && (
@@ -210,7 +225,7 @@ export function ProcessoEditor({ processo, prefeitura }: { processo: Processo; p
       <div className="daddus-process-bottom">
         <label className="daddus-notes">
           <span>Comentarios / notas do processo</span>
-          <textarea value={notes} onChange={(event) => { setNotes(event.target.value); setDirty(true); }} placeholder="Registre premissas, contatos com fornecedores ou observacoes internas..." />
+          <textarea value={notes} disabled={!editaTudo} onChange={(event) => { setNotes(event.target.value); setDirty(true); }} placeholder="Registre premissas, contatos com fornecedores ou observacoes internas..." />
         </label>
         <div className="daddus-reference-card">
           <ExternalLink size={18} />

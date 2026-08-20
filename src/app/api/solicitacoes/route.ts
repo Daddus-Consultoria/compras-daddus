@@ -1,21 +1,34 @@
-import { NextResponse } from "next/server";
+import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
+import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
 import { secretariaLabels } from "@/lib/compras";
-import { bancoConfigurado } from "@/lib/db";
 import { criarSolicitacao, listarSolicitacoes, type Solicitacao } from "@/lib/repositorio/solicitacoes";
-
-/** Usado apenas quando DATABASE_URL nao esta configurada. */
-const solicitacoesEmMemoria: Solicitacao[] = [];
+import { NextResponse } from "next/server";
 
 export async function GET() {
-  if (!bancoConfigurado()) return NextResponse.json(solicitacoesEmMemoria, { headers: { "x-origem-dados": "memoria" } });
+  const sessao = await obterSessao();
+  if (!sessao) return NextResponse.json({ error: "Sessao nao encontrada." }, { status: 401 });
+  if (modoDemonstracao() || sessao.prefeituraId === null) {
+    return NextResponse.json([], { headers: { "x-origem-dados": "memoria" } });
+  }
   try {
-    return NextResponse.json(await listarSolicitacoes(), { headers: { "x-origem-dados": "postgres" } });
+    // Secretario ve so o que a propria secretaria enviou; os demais, a prefeitura inteira.
+    const escopo = sessao.papel === "secretario" ? sessao.secretariaId : null;
+    return NextResponse.json(await listarSolicitacoes(sessao.prefeituraId, escopo), { headers: { "x-origem-dados": "postgres" } });
   } catch (erro) {
     return NextResponse.json({ error: (erro as Error).message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  const sessao = await obterSessao();
+  if (!sessao) return NextResponse.json({ error: "Sessao nao encontrada." }, { status: 401 });
+  if (modoDemonstracao() || sessao.prefeituraId === null) {
+    return NextResponse.json({ error: "Banco de dados nao configurado: nada foi gravado." }, { status: 503 });
+  }
+  if (!podeAbrirSolicitacao(sessao.papel)) {
+    return NextResponse.json({ error: "Seu perfil nao pode abrir solicitacoes." }, { status: 403 });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -25,7 +38,8 @@ export async function POST(request: Request) {
 
   const objeto = String(body.objeto ?? "").trim();
   const justificativa = String(body.justificativa ?? "").trim();
-  const secretaria = String(body.secretaria ?? "").trim();
+  // Secretario nao escolhe a secretaria: e sempre a dele.
+  const secretaria = sessao.papel === "secretario" ? String(sessao.secretariaChave ?? "") : String(body.secretaria ?? "").trim();
 
   if (!objeto) return NextResponse.json({ error: "Informe o objeto da compra." }, { status: 400 });
   if (!justificativa) return NextResponse.json({ error: "Informe a justificativa." }, { status: 400 });
@@ -33,20 +47,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Secretaria invalida: ${secretaria || "nao informada"}.` }, { status: 400 });
   }
 
-  if (!bancoConfigurado()) {
-    const solicitacao: Solicitacao = {
-      id: `SOL-${solicitacoesEmMemoria.length + 1}`,
+  try {
+    const criada: Solicitacao = await criarSolicitacao({
+      prefeituraId: sessao.prefeituraId,
       objeto,
       justificativa,
-      secretaria: secretaria as Solicitacao["secretaria"],
-      status: "pendente",
-      createdAt: new Date().toISOString(),
-    };
-    solicitacoesEmMemoria.unshift(solicitacao);
-    return NextResponse.json(solicitacao, { status: 201, headers: { "x-origem-dados": "memoria" } });
-  }
-  try {
-    const criada = await criarSolicitacao({ objeto, justificativa, secretaria });
+      secretaria,
+      autorId: sessao.id || null,
+    });
     return NextResponse.json(criada, { status: 201, headers: { "x-origem-dados": "postgres" } });
   } catch (erro) {
     return NextResponse.json({ error: (erro as Error).message }, { status: 500 });

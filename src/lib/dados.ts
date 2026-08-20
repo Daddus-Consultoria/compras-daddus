@@ -1,27 +1,30 @@
 import { demoProcessos, findProcesso } from "@/lib/compras";
-import { bancoConfigurado } from "@/lib/db";
+import { modoDemonstracao } from "@/lib/auth/sessao";
 import { lerProcesso, listarProcessos } from "@/lib/repositorio/processos";
 
 export type OrigemDados = "postgres" | "memoria";
 
 /**
- * Le do Postgres quando ele existe. Se o banco nao estiver configurado ou
- * responder com erro, cai nos processos de demonstracao e devolve a origem,
- * para a interface poder avisar que aquilo nao esta sendo gravado.
+ * Em demonstracao (sem banco ou sem segredo de sessao) devolve os processos de
+ * exemplo. Com banco, so devolve o que pertence a prefeitura informada.
  */
-export async function obterProcessos() {
-  if (!bancoConfigurado()) return { origem: "memoria" as OrigemDados, processos: demoProcessos, detalhe: "DATABASE_URL nao configurada." };
+export async function obterProcessos(prefeituraId: number | null) {
+  if (modoDemonstracao() || prefeituraId === null) {
+    return { origem: "memoria" as OrigemDados, processos: demoProcessos };
+  }
   try {
-    return { origem: "postgres" as OrigemDados, processos: await listarProcessos(), detalhe: "" };
-  } catch (erro) {
-    return { origem: "memoria" as OrigemDados, processos: demoProcessos, detalhe: (erro as Error).message };
+    return { origem: "postgres" as OrigemDados, processos: await listarProcessos(prefeituraId) };
+  } catch {
+    return { origem: "memoria" as OrigemDados, processos: demoProcessos };
   }
 }
 
-export async function obterProcesso(numero: string) {
-  if (!bancoConfigurado()) return { origem: "memoria" as OrigemDados, processo: findProcesso(numero) ?? null };
+export async function obterProcesso(prefeituraId: number | null, numero: string) {
+  if (modoDemonstracao() || prefeituraId === null) {
+    return { origem: "memoria" as OrigemDados, processo: findProcesso(numero) ?? null };
+  }
   try {
-    return { origem: "postgres" as OrigemDados, processo: await lerProcesso(numero) };
+    return { origem: "postgres" as OrigemDados, processo: await lerProcesso(prefeituraId, numero) };
   } catch {
     return { origem: "memoria" as OrigemDados, processo: findProcesso(numero) ?? null };
   }

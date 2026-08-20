@@ -92,12 +92,18 @@ async function montar(linhas: LinhaProcesso[]) {
   return linhas.map((linha) => paraProcesso(linha, porProcesso.get(linha.id) ?? []));
 }
 
-export async function listarProcessos() {
-  return montar(await consultar<LinhaProcesso>(`${selecaoProcesso} order by p.prazo_limite nulls last, p.numero_processo`));
+export async function listarProcessos(prefeituraId: number) {
+  return montar(await consultar<LinhaProcesso>(
+    `${selecaoProcesso} where p.prefeitura_id = $1 order by p.prazo_limite nulls last, p.numero_processo`,
+    [prefeituraId],
+  ));
 }
 
-export async function lerProcesso(numero: string) {
-  const linhas = await consultar<LinhaProcesso>(`${selecaoProcesso} where p.numero_processo = $1`, [numero]);
+export async function lerProcesso(prefeituraId: number, numero: string) {
+  const linhas = await consultar<LinhaProcesso>(
+    `${selecaoProcesso} where p.prefeitura_id = $1 and p.numero_processo = $2`,
+    [prefeituraId, numero],
+  );
   return (await montar(linhas))[0] ?? null;
 }
 
@@ -106,11 +112,18 @@ export async function lerProcesso(numero: string) {
  * reconciliacao acontece por numero_item, para nao depender de ids temporarios
  * de itens criados na tela.
  */
-export async function salvarLote(numero: string, dados: { notas: string; itens: LoteItem[] }) {
+export async function salvarLote(
+  prefeituraId: number,
+  numero: string,
+  dados: { notas: string; itens: LoteItem[] },
+  autorId: number | null = null,
+) {
   return emTransacao(async (executar) => {
+    // O filtro por prefeitura no proprio UPDATE e o que impede uma prefeitura
+    // de gravar no processo de outra, mesmo que o numero seja adivinhado.
     const [processo] = (await executar(
-      "update processos_compra set notas_processo = $2, atualizado_em = now() where numero_processo = $1 returning id",
-      [numero, dados.notas],
+      "update processos_compra set notas_processo = $3, atualizado_em = now() where prefeitura_id = $1 and numero_processo = $2 returning id",
+      [prefeituraId, numero, dados.notas],
     )) as Array<{ id: number }>;
     if (!processo) return false;
 
@@ -130,11 +143,11 @@ export async function salvarLote(numero: string, dados: { notas: string; itens: 
 
       for (const chave of secretariaKeys) {
         await executar(
-          `insert into item_quantidades (item_id, secretaria_id, quantidade)
-           values ($1, (select id from secretarias where chave = $2), $3)
+          `insert into item_quantidades (item_id, secretaria_id, quantidade, atualizado_por_id)
+           values ($1, (select id from secretarias where prefeitura_id = $2 and chave = $3), $4, $5)
            on conflict (item_id, secretaria_id)
-           do update set quantidade = excluded.quantidade, atualizado_em = now()`,
-          [linha.id, chave, item.quantidades[chave] ?? 0],
+           do update set quantidade = excluded.quantidade, atualizado_por_id = excluded.atualizado_por_id, atualizado_em = now()`,
+          [linha.id, prefeituraId, chave, item.quantidades[chave] ?? 0, autorId],
         );
       }
 

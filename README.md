@@ -86,7 +86,11 @@ conexao com pooling quando o provedor oferecer.
 
 ```env
 DATABASE_URL=postgres://usuario:senha@host:5432/banco?sslmode=require
+SESSION_SECRET=<32+ bytes aleatorios: openssl rand -hex 32>
 ```
+
+`SESSION_SECRET` assina o cookie de sessao. Trocar esse valor derruba todas as
+sessoes abertas, o que serve como botao de emergencia.
 
 Aplicar a estrutura e, se quiser, os dados de demonstracao:
 
@@ -141,3 +145,44 @@ reconcilia por `numero_item`: itens ausentes sao removidos, os demais sao
 inseridos ou atualizados. Assim a tela nao precisa administrar ids de itens
 que ainda nao existem no banco. Qualquer item malformado rejeita o lote
 inteiro, para nao gravar pela metade.
+
+## Perfis de acesso
+
+Toda pessoa entra com o proprio e-mail e enxerga apenas o fluxo do seu perfil.
+
+| Perfil | Escopo | O que faz |
+| --- | --- | --- |
+| `superadmin` | Todas as prefeituras | Cria prefeituras e usuarios de qualquer municipio |
+| `admin` | Uma prefeitura | Cria e desativa usuarios da propria prefeitura; edita os dados institucionais |
+| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; exporta o PDF; consulta os dados institucionais |
+| `secretario` | Uma secretaria | Abre solicitacoes e preenche a quantidade apenas da propria secretaria |
+| `gestor` | Uma prefeitura | Acompanha processos e solicitacoes em somente leitura |
+
+### Isolamento
+
+Cada prefeitura e um ambiente separado. O isolamento nao depende da interface:
+
+- toda consulta filtra por `prefeitura_id`, inclusive o `UPDATE` que grava o lote,
+  entao adivinhar o numero de um processo alheio devolve 404 e nao grava nada;
+- o secretario nunca envia o lote inteiro: o servidor remonta a partir do que
+  esta gravado e troca so a coluna da secretaria dele, ignorando o resto do que
+  a tela mandar;
+- desativar alguem tem efeito na requisicao seguinte, porque o usuario e relido
+  a cada acesso em vez de ser confiado ao cookie.
+
+### Primeiro acesso
+
+O superadmin (ou o admin) cadastra a pessoa com uma senha inicial e a repassa.
+No primeiro login o portal exige a troca antes de liberar qualquer tela. O mesmo
+vale quando um administrador redefine a senha de outra pessoa.
+
+Para criar o primeiro superadmin num banco novo, rode `npm run db:semear`: ele
+imprime os acessos criados e a senha inicial uma unica vez. Defina `SENHA_SEED`
+para escolher a senha; sem isso, uma e sorteada.
+
+## Limitacao conhecida
+
+As quatro secretarias (Educacao, Saude, Assistencia Social e Administracao) sao
+fixas: toda prefeitura nasce com elas e as colunas do lote seguem essa lista. A
+tabela `secretarias` ja e por prefeitura, entao permitir que cada municipio
+defina as suas e mudanca de interface, nao de modelagem.
