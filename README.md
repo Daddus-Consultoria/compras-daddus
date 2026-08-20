@@ -180,6 +180,11 @@ Para criar o primeiro superadmin num banco novo, rode `npm run db:semear`: ele
 imprime os acessos criados e a senha inicial uma unica vez. Defina `SENHA_SEED`
 para escolher a senha; sem isso, uma e sorteada.
 
+Em producao use `SEMEAR_DEMO=false npm run db:semear`, que cria apenas o
+superadmin. Sem essa variavel o seed tambem insere uma prefeitura de exemplo
+com tres processos, o que serve para desenvolvimento e demonstracao mas nao
+para um banco real.
+
 ## Secretarias
 
 Cada prefeitura cadastra quantas secretarias precisar, em Configuracao da

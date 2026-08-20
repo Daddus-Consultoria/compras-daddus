@@ -14,6 +14,10 @@ if (!url) {
 // Sem SENHA_SEED, cada execucao gera uma senha nova e a imprime uma unica vez.
 const senhaInicial = process.env.SENHA_SEED || `Daddus${randomBytes(3).toString("hex")}1`;
 
+// Num banco de producao normalmente se quer apenas o superadmin: a prefeitura
+// de exemplo existe para desenvolvimento e demonstracao.
+const comDemonstracao = process.env.SEMEAR_DEMO !== "false";
+
 const ssl = /sslmode=(require|verify-full|verify-ca)/.test(url) || !/@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url);
 const cliente = new pg.Client({ connectionString: url, ssl: ssl ? { rejectUnauthorized: false } : undefined });
 await cliente.connect();
@@ -26,6 +30,21 @@ const fontes = { bnc: "BNC", pncp: "PNCP", mercado: "Mercado" };
 
 await cliente.query("begin");
 try {
+  const hash = await gerarHash(senhaInicial);
+  await cliente.query(
+    `insert into usuarios (email, nome, senha_hash, papel) values ($1, $2, $3, 'superadmin')
+     on conflict (email) do update set nome = excluded.nome`,
+    ["superadmin@daddus.com.br", "Equipe Daddus", hash],
+  );
+
+  if (!comDemonstracao) {
+    await cliente.query("commit");
+    console.log("semeado: apenas o superadmin (SEMEAR_DEMO=false)");
+    console.log(`\n  superadmin@daddus.com.br\n  senha inicial: ${senhaInicial}\n`);
+    await cliente.end();
+    process.exit(0);
+  }
+
   const { rows: linhasPrefeitura } = await cliente.query(
     `insert into prefeituras (slug, nome, estado, cnpj, endereco_compras)
      values ('nova-esperanca', 'Prefeitura de Nova Esperanca', 'SP', '12.345.678/0001-90', 'Praca da Republica, 100 - Centro')
@@ -44,9 +63,7 @@ try {
   const { rows: secretarias } = await cliente.query("select id, chave from secretarias where prefeitura_id = $1", [prefeituraId]);
   const idPorChave = Object.fromEntries(secretarias.map((linha) => [linha.chave, linha.id]));
 
-  const hash = await gerarHash(senhaInicial);
   const usuarios = [
-    { email: "superadmin@daddus.com.br", nome: "Equipe Daddus", papel: "superadmin", prefeitura: null, secretaria: null },
     { email: "admin@novaesperanca.sp.gov.br", nome: "Helena Prado", papel: "admin", prefeitura: prefeituraId, secretaria: null },
     { email: "compras@novaesperanca.sp.gov.br", nome: "Marina Alves", papel: "compras", prefeitura: prefeituraId, secretaria: null },
     { email: "educacao@novaesperanca.sp.gov.br", nome: "Rafael Nunes", papel: "secretario", prefeitura: prefeituraId, secretaria: idPorChave.educacao },
