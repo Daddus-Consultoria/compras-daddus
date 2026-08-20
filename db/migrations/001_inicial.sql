@@ -22,6 +22,7 @@ create table if not exists secretarias (
   chave         text    not null,
   nome          text    not null,
   ordem         integer not null default 0,
+  ativa         boolean not null default true,
   unique (prefeitura_id, chave)
 );
 

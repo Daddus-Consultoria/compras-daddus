@@ -3,14 +3,14 @@
 import { AppShell } from "@/components/compras/AppShell";
 import { podeEditarConfigPrefeitura } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
-import type { PrefeituraConfig } from "@/lib/compras";
-import { AlertTriangle, CheckCircle2, ImagePlus, Save } from "lucide-react";
+import type { PrefeituraConfig, SecretariaInfo } from "@/lib/compras";
+import { AlertTriangle, CheckCircle2, ImagePlus, Plus, Save, Trash2 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
 const emptyConfig: PrefeituraConfig = { estado: "", nome: "", cnpj: "", logoUrl: "", enderecoCompras: "" };
 const estados = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"];
 
-export function ConfiguracaoPrefeitura({ sessao }: { sessao: Sessao }) {
+export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciais }: { sessao: Sessao; secretarias: SecretariaInfo[] }) {
   // Os dados institucionais pertencem a administracao da prefeitura; o Setor de
   // Compras os consulta porque saem no cabecalho dos PDFs, mas nao os altera.
   const podeEditar = podeEditarConfigPrefeitura(sessao.papel);
@@ -21,6 +21,9 @@ export function ConfiguracaoPrefeitura({ sessao }: { sessao: Sessao }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(true);
+  const [secretarias, setSecretarias] = useState(secretariasIniciais);
+  const [novaSecretaria, setNovaSecretaria] = useState("");
+  const [erroSecretaria, setErroSecretaria] = useState("");
 
   useEffect(() => {
     fetch("/api/config-prefeitura", { cache: "no-store" })
@@ -78,6 +81,32 @@ export function ConfiguracaoPrefeitura({ sessao }: { sessao: Sessao }) {
 
   const logoExibida = previewUrl || config.logoUrl;
 
+  const recarregarSecretarias = async () => {
+    const resposta = await fetch("/api/secretarias", { cache: "no-store" });
+    if (resposta.ok) setSecretarias(await resposta.json());
+  };
+
+  const chamarSecretarias = async (metodo: string, corpo: unknown, busca = "") => {
+    setErroSecretaria("");
+    const resposta = await fetch(`/api/secretarias${busca}`, {
+      method: metodo,
+      headers: corpo ? { "Content-Type": "application/json" } : undefined,
+      body: corpo ? JSON.stringify(corpo) : undefined,
+    });
+    const retorno = await resposta.json().catch(() => ({}));
+    if (!resposta.ok) {
+      setErroSecretaria(retorno.error || `A API respondeu ${resposta.status}.`);
+      return false;
+    }
+    await recarregarSecretarias();
+    return true;
+  };
+
+  const adicionarSecretaria = async (event: FormEvent) => {
+    event.preventDefault();
+    if (await chamarSecretarias("POST", { nome: novaSecretaria })) setNovaSecretaria("");
+  };
+
   return (
     <AppShell sessao={sessao} titulo="Configuracao">
       <div className="daddus-page-heading">
@@ -129,6 +158,62 @@ export function ConfiguracaoPrefeitura({ sessao }: { sessao: Sessao }) {
                 <small>PNG ou JPG · recomendado 600 x 180 px</small>
                 <input type="file" accept="image/png,image/jpeg,image/svg+xml" disabled={!podeEditar} onChange={handleLogo} />
               </label>
+            </div>
+
+            <div className="daddus-form-section">
+              <div>
+                <h3>Secretarias</h3>
+                <p>Cada secretaria vira uma coluna na planilha do lote e pode ter usuarios proprios. Cadastre quantas o municipio tiver.</p>
+              </div>
+              <div>
+                {erroSecretaria && <span className="daddus-inline-error"><AlertTriangle size={15} /> {erroSecretaria}</span>}
+                <div className="daddus-table-wrap">
+                  <table className="daddus-table">
+                    <thead><tr><th>Nome</th><th>Chave</th><th>Situacao</th>{podeEditar && <th>Acoes</th>}</tr></thead>
+                    <tbody>
+                      {secretarias.map((secretaria) => (
+                        <tr key={secretaria.id}>
+                          <td>
+                            {podeEditar ? (
+                              <input
+                                className="cell-input"
+                                defaultValue={secretaria.nome}
+                                onBlur={(event) => {
+                                  const nome = event.target.value.trim();
+                                  if (nome && nome !== secretaria.nome) chamarSecretarias("PATCH", { id: secretaria.id, nome });
+                                }}
+                              />
+                            ) : secretaria.nome}
+                          </td>
+                          <td><code>{secretaria.chave}</code></td>
+                          <td><span className={`daddus-status ${secretaria.ativa ? "blue" : "gray"}`}>{secretaria.ativa ? "Ativa" : "Desativada"}</span></td>
+                          {podeEditar && (
+                            <td>
+                              <div className="daddus-linha-acoes">
+                                <button type="button" className="daddus-row-action" onClick={() => chamarSecretarias("PATCH", { id: secretaria.id, ativa: !secretaria.ativa })}>
+                                  {secretaria.ativa ? "Desativar" : "Reativar"}
+                                </button>
+                                <button type="button" className="daddus-row-action" onClick={() => chamarSecretarias("DELETE", null, `?id=${secretaria.id}`)}>
+                                  <Trash2 size={13} /> Excluir
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                      {!secretarias.length && <tr><td colSpan={4} className="daddus-empty">Nenhuma secretaria cadastrada.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                {podeEditar && (
+                  <div className="daddus-nova-secretaria">
+                    <input value={novaSecretaria} onChange={(event) => setNovaSecretaria(event.target.value)} placeholder="Ex.: Meio Ambiente" aria-label="Nome da nova secretaria" />
+                    <button type="button" className="daddus-secondary-button" onClick={adicionarSecretaria} disabled={novaSecretaria.trim().length < 2}>
+                      <Plus size={15} /> Adicionar secretaria
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="daddus-form-actions">

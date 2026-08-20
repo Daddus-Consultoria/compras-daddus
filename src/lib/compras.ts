@@ -1,4 +1,16 @@
-export type Secretaria = "educacao" | "saude" | "assistencia" | "administracao";
+/**
+ * A chave de uma secretaria da prefeitura. Nao e mais uma lista fechada: cada
+ * municipio cadastra as suas, entao o conjunto vem do banco.
+ */
+export type Secretaria = string;
+
+export type SecretariaInfo = {
+  id: number;
+  chave: string;
+  nome: string;
+  ordem: number;
+  ativa: boolean;
+};
 
 export type Cotacoes = {
   bnc: number;
@@ -11,7 +23,7 @@ export type LoteItem = {
   item: number;
   especificacao: string;
   unidade: string;
-  quantidades: Record<Secretaria, number>;
+  quantidades: Record<string, number>;
   cotacoes: Cotacoes;
 };
 
@@ -57,25 +69,43 @@ export type Processo = {
   itens: LoteItem[];
 };
 
-export const secretariaLabels: Record<Secretaria, string> = {
-  educacao: "Educacao",
-  saude: "Saude",
-  assistencia: "Assist. Social",
-  administracao: "Administracao",
-};
+/** Secretarias com que uma prefeitura nova comeca; depois ela edita a vontade. */
+export const secretariasPadrao = [
+  { chave: "educacao", nome: "Educacao" },
+  { chave: "saude", nome: "Saude" },
+  { chave: "assistencia", nome: "Assist. Social" },
+  { chave: "administracao", nome: "Administracao" },
+];
 
-/** Rotulo curto, usado nos cabecalhos da planilha, onde a coluna e estreita. */
-export const secretariaKeys = Object.keys(secretariaLabels) as Secretaria[];
+/** Usada apenas no modo de demonstracao, quando nao ha banco. */
+export const secretariasDemo: SecretariaInfo[] = secretariasPadrao.map((secretaria, indice) => ({
+  id: indice + 1,
+  chave: secretaria.chave,
+  nome: secretaria.nome,
+  ordem: indice + 1,
+  ativa: true,
+}));
 
-const secretariaNomes: Record<Secretaria, string> = {
-  educacao: "Educacao",
-  saude: "Saude",
-  assistencia: "Assistencia Social",
-  administracao: "Administracao",
-};
+export function nomeCurtoSecretaria(secretarias: SecretariaInfo[], chave: Secretaria | null) {
+  if (!chave) return "-";
+  return secretarias.find((secretaria) => secretaria.chave === chave)?.nome ?? chave;
+}
 
-export function nomeSecretaria(chave: Secretaria | null) {
-  return chave ? `Secretaria de ${secretariaNomes[chave]}` : "Sem secretaria definida";
+export function nomeSecretaria(secretarias: SecretariaInfo[], chave: Secretaria | null) {
+  if (!chave) return "Sem secretaria definida";
+  const encontrada = secretarias.find((secretaria) => secretaria.chave === chave);
+  return encontrada ? `Secretaria de ${encontrada.nome}` : `Secretaria de ${chave}`;
+}
+
+/** Gera a chave a partir do nome digitado: "Meio Ambiente" vira "meio-ambiente". */
+export function chaveDaSecretaria(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
 }
 
 export const demoProcessos: Processo[] = [
@@ -152,6 +182,10 @@ export function quotesFilled(item: LoteItem) {
 
 export function loteTotal(items: LoteItem[]) {
   return items.reduce((total, item) => total + itemAverage(item) * itemTotalQuantity(item), 0);
+}
+
+export function quantidadeDe(item: LoteItem, chave: Secretaria) {
+  return Number(item.quantidades?.[chave] ?? 0);
 }
 
 export function nextItemNumber(items: LoteItem[]) {

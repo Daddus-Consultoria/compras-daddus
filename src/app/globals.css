@@ -68,3 +68,7 @@ button { font: inherit; }
 .daddus-linha-acoes { display: flex; flex-wrap: wrap; gap: 10px; }
 .daddus-table td .daddus-status + .daddus-status { margin-left: 5px; }
 .daddus-info-card ol li { margin-bottom: 7px; }
+
+.daddus-nova-secretaria { align-items: center; display: flex; gap: 9px; margin-top: 12px; }
+.daddus-nova-secretaria input { border: 1px solid var(--line); border-radius: 4px; flex: 1; font: inherit; font-size: 11px; outline-color: var(--primary); padding: 8px 10px; }
+.daddus-table code { background: #f2f2f4; border-radius: 3px; font-size: 9px; padding: 2px 5px; }

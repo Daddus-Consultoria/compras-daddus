@@ -1,6 +1,6 @@
 import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { secretariaLabels } from "@/lib/compras";
+import { listarSecretarias } from "@/lib/repositorio/secretarias";
 import { criarSolicitacao, listarSolicitacoes, type Solicitacao } from "@/lib/repositorio/solicitacoes";
 import { NextResponse } from "next/server";
 
@@ -43,8 +43,9 @@ export async function POST(request: Request) {
 
   if (!objeto) return NextResponse.json({ error: "Informe o objeto da compra." }, { status: 400 });
   if (!justificativa) return NextResponse.json({ error: "Informe a justificativa." }, { status: 400 });
-  if (!(secretaria in secretariaLabels)) {
-    return NextResponse.json({ error: `Secretaria invalida: ${secretaria || "nao informada"}.` }, { status: 400 });
+  const secretarias = await listarSecretarias(sessao.prefeituraId);
+  if (!secretarias.some((opcao) => opcao.chave === secretaria && opcao.ativa)) {
+    return NextResponse.json({ error: `Secretaria invalida ou desativada: ${secretaria || "nao informada"}.` }, { status: 400 });
   }
 
   try {

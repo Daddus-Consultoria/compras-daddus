@@ -1,7 +1,8 @@
 import { GestaoUsuarios } from "@/components/compras/GestaoUsuarios";
 import { exigirPapel, modoDemonstracao } from "@/lib/auth/sessao";
 import { listarPrefeituras } from "@/lib/repositorio/prefeituras";
-import { listarSecretarias, listarUsuarios } from "@/lib/repositorio/usuarios";
+import { listarUsuarios } from "@/lib/repositorio/usuarios";
+import { listarSecretarias } from "@/lib/repositorio/secretarias";
 
 export const dynamic = "force-dynamic";
 

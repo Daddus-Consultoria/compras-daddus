@@ -1,6 +1,7 @@
 import { podeEditarLote, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { secretariaKeys, type LoteItem, type Secretaria } from "@/lib/compras";
+import type { LoteItem, Secretaria } from "@/lib/compras";
+import { listarSecretarias } from "@/lib/repositorio/secretarias";
 import { lerProcesso, salvarLote } from "@/lib/repositorio/processos";
 import { NextResponse } from "next/server";
 
@@ -12,7 +13,7 @@ function numeroValido(valor: unknown) {
 }
 
 /** Rejeita o lote inteiro quando qualquer item vier malformado, para nao gravar pela metade. */
-function validar(corpo: unknown) {
+function validar(corpo: unknown, chaves: string[]) {
   if (typeof corpo !== "object" || corpo === null) return "Corpo da requisicao invalido.";
   const { notas, itens } = corpo as { notas?: unknown; itens?: unknown };
   if (typeof notas !== "string") return "Campo 'notas' deve ser texto.";
@@ -26,8 +27,9 @@ function validar(corpo: unknown) {
     numeros.add(Number(item.item));
     if (typeof item.especificacao !== "string") return `Especificacao invalida no item ${item.item}.`;
     if (typeof item.unidade !== "string" || !item.unidade.trim()) return `Unidade obrigatoria no item ${item.item}.`;
-    for (const chave of secretariaKeys) {
-      if (!numeroValido(item.quantidades?.[chave as Secretaria])) return `Quantidade invalida em ${chave}, item ${item.item}.`;
+    for (const chave of chaves) {
+      // Secretaria criada depois do lote nao aparece nos itens antigos: falta = zero.
+      if (!numeroValido(item.quantidades?.[chave] ?? 0)) return `Quantidade invalida em ${chave}, item ${item.item}.`;
     }
     for (const chave of chavesCotacao) {
       if (!numeroValido(item.cotacoes?.[chave])) return `Cotacao invalida em ${chave}, item ${item.item}.`;
@@ -72,7 +74,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ nume
     return NextResponse.json({ error: "Corpo da requisicao invalido." }, { status: 400 });
   }
 
-  const problema = validar(corpo);
+  const secretarias = await listarSecretarias(sessao.prefeituraId);
+  const problema = validar(corpo, secretarias.map((secretaria) => secretaria.chave));
   if (problema) return NextResponse.json({ error: problema }, { status: 400 });
 
   try {

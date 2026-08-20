@@ -1,6 +1,6 @@
 "use client";
 
-import type { LoteItem, PrefeituraConfig, Processo } from "@/lib/compras";
+import type { LoteItem, PrefeituraConfig, Processo, SecretariaInfo } from "@/lib/compras";
 import { itemAverage, itemTotalQuantity, loteTotal, money, nomeSecretaria } from "@/lib/compras";
 import { FileDown } from "lucide-react";
 import jsPDF from "jspdf";
@@ -9,7 +9,7 @@ import autoTable from "jspdf-autotable";
 const margem = 14;
 const larguraUtil = 269;
 
-export function ExportLicitacaoPDF({ items, prefeitura, processo, notas }: { items: LoteItem[]; prefeitura: PrefeituraConfig; processo: Processo; notas: string }) {
+export function ExportLicitacaoPDF({ items, prefeitura, processo, secretarias, notas }: { items: LoteItem[]; prefeitura: PrefeituraConfig; processo: Processo; secretarias: SecretariaInfo[]; notas: string }) {
   const exportPdf = () => {
     const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     pdf.setTextColor(20, 20, 20);
@@ -30,21 +30,18 @@ export function ExportLicitacaoPDF({ items, prefeitura, processo, notas }: { ite
     pdf.setFont("helvetica", "normal");
     pdf.text(`Processo: PE ${processo.id}`, margem, 55);
     pdf.text(`Objeto: ${processo.objeto}`, margem, 61, { maxWidth: larguraUtil });
-    pdf.text(`Solicitante: ${nomeSecretaria(processo.secretariaSolicitante)}`, margem, 67);
+    pdf.text(`Solicitante: ${nomeSecretaria(secretarias, processo.secretariaSolicitante)}`, margem, 67);
     pdf.text(`Prazo limite: ${processo.prazoLimite}`, 150, 55);
     pdf.text(`Status: ${processo.status}`, 150, 61);
 
     autoTable(pdf, {
       startY: 74,
-      head: [["Item", "Especificacao detalhada", "Un.", "Educacao", "Saude", "Assist. Social", "Administracao", "Qtd. total", "BNC", "PNCP", "Mercado", "Valor medio", "Valor total"]],
+      head: [["Item", "Especificacao detalhada", "Un.", ...secretarias.map((secretaria) => secretaria.nome), "Qtd. total", "BNC", "PNCP", "Mercado", "Valor medio", "Valor total"]],
       body: items.map((item) => [
         item.item,
         item.especificacao,
         item.unidade,
-        item.quantidades.educacao,
-        item.quantidades.saude,
-        item.quantidades.assistencia,
-        item.quantidades.administracao,
+        ...secretarias.map((secretaria) => Number(item.quantidades[secretaria.chave] ?? 0)),
         itemTotalQuantity(item),
         money(item.cotacoes.bnc),
         money(item.cotacoes.pncp),
@@ -52,7 +49,7 @@ export function ExportLicitacaoPDF({ items, prefeitura, processo, notas }: { ite
         money(itemAverage(item)),
         money(itemAverage(item) * itemTotalQuantity(item)),
       ]),
-      foot: [["", "Valor total estimado do lote", "", "", "", "", "", "", "", "", "", "", money(loteTotal(items))]],
+      foot: [["", "Valor total estimado do lote", ...Array(secretarias.length + 8).fill(""), money(loteTotal(items))]],
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [150, 24, 48] },
       footStyles: { fillColor: [240, 240, 242], textColor: [20, 20, 20], fontStyle: "bold" },

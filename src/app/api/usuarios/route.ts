@@ -1,7 +1,8 @@
 import { papeisQuePodeCriar, podeGerenciarUsuarios, type Papel } from "@/lib/auth/papeis";
 import { gerarHash, problemaNaSenha } from "@/lib/auth/senha";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { criarUsuario, definirAtivo, definirSenha, emailJaUsado, lerUsuario, listarSecretarias, listarUsuarios } from "@/lib/repositorio/usuarios";
+import { criarUsuario, definirAtivo, definirSenha, emailJaUsado, lerUsuario, listarUsuarios } from "@/lib/repositorio/usuarios";
+import { listarSecretarias } from "@/lib/repositorio/secretarias";
 import { NextResponse } from "next/server";
 
 const emailValido = (valor: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor);

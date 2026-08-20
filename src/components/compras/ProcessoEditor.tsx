@@ -13,14 +13,14 @@ import {
   nomeSecretaria,
   processoStatusLabels,
   quotesFilled,
-  secretariaKeys,
-  secretariaLabels,
+  nomeCurtoSecretaria,
   statusTone,
   toNumericValue,
   type LoteItem,
   type PrefeituraConfig,
   type Processo,
   type Secretaria,
+  type SecretariaInfo,
 } from "@/lib/compras";
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, ExternalLink, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -29,13 +29,17 @@ import { useEffect, useState } from "react";
 
 const quoteKeys = ["bnc", "pncp", "mercado"] as const;
 
-export function ProcessoEditor({ processo, prefeitura, sessao }: { processo: Processo; prefeitura: PrefeituraConfig; sessao: Sessao }) {
+export function ProcessoEditor({ processo, prefeitura, sessao, secretarias }: { processo: Processo; prefeitura: PrefeituraConfig; sessao: Sessao; secretarias: SecretariaInfo[] }) {
   const router = useRouter();
   const podeEditar = podeEditarLote(sessao.papel);
   const editaTudo = podeEditarTodasAsColunas(sessao.papel);
   // Secretario mexe apenas na coluna da propria secretaria; compras, em todas.
   const minhaSecretaria: Secretaria | null = editaTudo ? null : sessao.secretariaChave;
-  const colunaEditavel = (chave: Secretaria) => podeEditar && (editaTudo || chave === minhaSecretaria);
+  const colunaEditavel = (chave: Secretaria) => {
+    const secretaria = secretarias.find((opcao) => opcao.chave === chave);
+    if (!podeEditar || (secretaria && !secretaria.ativa)) return false;
+    return editaTudo || chave === minhaSecretaria;
+  };
   const [items, setItems] = useState<LoteItem[]>(processo.itens);
   const [notes, setNotes] = useState(processo.notas);
   const [referenceMessage, setReferenceMessage] = useState("");
@@ -62,7 +66,7 @@ export function ProcessoEditor({ processo, prefeitura, sessao }: { processo: Pro
   const addItem = () => {
     setItems((current) => [
       ...current,
-      { id: crypto.randomUUID(), item: nextItemNumber(current), especificacao: "", unidade: "UN", quantidades: { educacao: 0, saude: 0, assistencia: 0, administracao: 0 }, cotacoes: { bnc: 0, pncp: 0, mercado: 0 } },
+      { id: crypto.randomUUID(), item: nextItemNumber(current), especificacao: "", unidade: "UN", quantidades: Object.fromEntries(secretarias.map((secretaria) => [secretaria.chave, 0])), cotacoes: { bnc: 0, pncp: 0, mercado: 0 } },
     ]);
     setDirty(true);
   };
@@ -114,10 +118,10 @@ export function ProcessoEditor({ processo, prefeitura, sessao }: { processo: Pro
           <Link href="/painel/compras" className="daddus-back-link"><ArrowLeft size={15} /> Voltar para processos</Link>
           <span className="daddus-overline">Processo PE {processo.id}</span>
           <h2>Composicao do lote</h2>
-          <p>{processo.objeto} · {nomeSecretaria(processo.secretariaSolicitante)}</p>
+          <p>{processo.objeto} · {nomeSecretaria(secretarias, processo.secretariaSolicitante)}</p>
         </div>
         <div className="daddus-heading-actions">
-          <ExportLicitacaoPDF items={items} prefeitura={prefeitura} processo={processo} notas={notes} />
+          <ExportLicitacaoPDF items={items} prefeitura={prefeitura} processo={processo} secretarias={secretarias} notas={notes} />
           {podeEditar && (
             <button className="daddus-primary-button" type="button" onClick={salvarLote} disabled={salvando}>
               <Check size={16} /> {salvando ? "Salvando..." : "Salvar lote"}
@@ -163,7 +167,7 @@ export function ProcessoEditor({ processo, prefeitura, sessao }: { processo: Pro
           ) : editaTudo ? (
             <span>Voce edita o lote como <strong>Setor de Compras</strong>: todas as colunas e as cotacoes estao liberadas.</span>
           ) : (
-            <span>Voce esta editando como <strong>Secretaria de {minhaSecretaria ? secretariaLabels[minhaSecretaria] : "-"}</strong>. As quantidades das demais secretarias ficam bloqueadas para preservar a autoria.</span>
+            <span>Voce esta editando como <strong>Secretaria de {nomeCurtoSecretaria(secretarias, minhaSecretaria)}</strong>. As quantidades das demais secretarias ficam bloqueadas para preservar a autoria.</span>
           )}
           <ChevronDown size={15} />
         </div>
@@ -174,7 +178,7 @@ export function ProcessoEditor({ processo, prefeitura, sessao }: { processo: Pro
                 <th>Item</th>
                 <th>Especificacao detalhada</th>
                 <th>Unidade</th>
-                {secretariaKeys.map((key) => <th key={key}>{secretariaLabels[key]}</th>)}
+                {secretarias.map((secretaria) => <th key={secretaria.chave} title={secretaria.ativa ? undefined : "Secretaria desativada"}>{secretaria.nome}{secretaria.ativa ? "" : " *"}</th>)}
                 <th>Qtd. total</th>
                 <th>Cotacao 1<br /><small>BNC</small></th>
                 <th>Cotacao 2<br /><small>PNCP</small></th>
@@ -190,16 +194,16 @@ export function ProcessoEditor({ processo, prefeitura, sessao }: { processo: Pro
                   <td className="item-number">{item.item}</td>
                   <td><textarea className="cell-textarea" value={item.especificacao} placeholder="Descreva o item" disabled={!editaTudo} onChange={(event) => updateText(item.id, "especificacao", event.target.value)} /></td>
                   <td><input className="cell-input unit" value={item.unidade} disabled={!editaTudo} onChange={(event) => updateText(item.id, "unidade", event.target.value)} /></td>
-                  {secretariaKeys.map((key) => (
-                    <td key={key}>
+                  {secretarias.map((secretaria) => (
+                    <td key={secretaria.chave}>
                       <input
                         className="cell-input quantity"
                         type="number"
                         min="0"
-                        value={item.quantidades[key] || ""}
-                        disabled={!colunaEditavel(key)}
-                        onChange={(event) => updateQuantity(item.id, key, event.target.value)}
-                        title={colunaEditavel(key) ? undefined : `Somente a Secretaria de ${secretariaLabels[key]} pode editar`}
+                        value={item.quantidades[secretaria.chave] || ""}
+                        disabled={!colunaEditavel(secretaria.chave)}
+                        onChange={(event) => updateQuantity(item.id, secretaria.chave, event.target.value)}
+                        title={colunaEditavel(secretaria.chave) ? undefined : `Somente a Secretaria de ${secretaria.nome} pode editar`}
                       />
                     </td>
                   ))}
@@ -215,7 +219,7 @@ export function ProcessoEditor({ processo, prefeitura, sessao }: { processo: Pro
                 </tr>
               ))}
               {items.length === 0 && (
-                <tr><td colSpan={13} className="daddus-empty">Nenhum item no lote. Use &ldquo;Adicionar item&rdquo; para comecar.</td></tr>
+                <tr><td colSpan={secretarias.length + 9} className="daddus-empty">Nenhum item no lote. Use &ldquo;Adicionar item&rdquo; para comecar.</td></tr>
               )}
             </tbody>
           </table>

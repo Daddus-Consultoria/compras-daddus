@@ -3,7 +3,7 @@
 import { AppShell } from "@/components/compras/AppShell";
 import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
-import { secretariaKeys, secretariaLabels, solicitacaoStatusLabels, type Secretaria, type SolicitacaoStatus } from "@/lib/compras";
+import { nomeCurtoSecretaria, solicitacaoStatusLabels, type Secretaria, type SecretariaInfo, type SolicitacaoStatus } from "@/lib/compras";
 import { AlertTriangle, CheckCircle2, Paperclip, Send } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
@@ -21,7 +21,7 @@ function formatarData(valor: string) {
   return Number.isNaN(data.getTime()) ? "-" : data.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-export function SolicitacoesSecretaria({ sessao }: { sessao: Sessao }) {
+export function SolicitacoesSecretaria({ sessao, secretarias }: { sessao: Sessao; secretarias: SecretariaInfo[] }) {
   const podeEnviar = podeAbrirSolicitacao(sessao.papel);
   const secretariaFixa = sessao.papel === "secretario" ? sessao.secretariaChave : null;
   const [enviadas, setEnviadas] = useState<Solicitacao[]>([]);
@@ -79,7 +79,7 @@ export function SolicitacoesSecretaria({ sessao }: { sessao: Sessao }) {
     <AppShell sessao={sessao}>
       <div className="daddus-page-heading">
         <div>
-          <span className="daddus-overline">{secretariaFixa ? secretariaLabels[secretariaFixa] : sessao.prefeituraNome}</span>
+          <span className="daddus-overline">{secretariaFixa ? nomeCurtoSecretaria(secretarias, secretariaFixa) : sessao.prefeituraNome}</span>
           <h2>{podeEnviar ? "Solicitar abertura de compra" : "Solicitacoes recebidas"}</h2>
           <p>{podeEnviar
             ? "Envie ao Setor de Compras as informacoes iniciais para abrir um novo processo."
@@ -98,10 +98,10 @@ export function SolicitacoesSecretaria({ sessao }: { sessao: Sessao }) {
             <div className="daddus-form-grid single">
               <label>Secretaria
                 {secretariaFixa ? (
-                  <input name="secretaria" value={secretariaLabels[secretariaFixa]} readOnly title="Sua secretaria e definida pelo seu usuario" />
+                  <input name="secretaria" value={nomeCurtoSecretaria(secretarias, secretariaFixa)} readOnly title="Sua secretaria e definida pelo seu usuario" />
                 ) : (
                   <select name="secretaria" defaultValue="educacao">
-                    {secretariaKeys.map((chave) => <option key={chave} value={chave}>{secretariaLabels[chave]}</option>)}
+                    {secretarias.filter((secretaria) => secretaria.ativa).map((secretaria) => <option key={secretaria.chave} value={secretaria.chave}>{secretaria.nome}</option>)}
                   </select>
                 )}
               </label>
@@ -153,7 +153,7 @@ export function SolicitacoesSecretaria({ sessao }: { sessao: Sessao }) {
               {enviadas.map((solicitacao) => (
                 <tr key={solicitacao.id}>
                   <td>{formatarData(solicitacao.createdAt)}</td>
-                  <td>{solicitacao.secretaria ? secretariaLabels[solicitacao.secretaria] : "-"}</td>
+                  <td>{nomeCurtoSecretaria(secretarias, solicitacao.secretaria)}</td>
                   <td>{solicitacao.objeto}</td>
                   <td><span className="daddus-status gray">{solicitacaoStatusLabels[solicitacao.status] || solicitacao.status}</span></td>
                 </tr>

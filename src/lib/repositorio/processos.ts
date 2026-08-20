@@ -1,5 +1,4 @@
 import type { LoteItem, Processo, ProcessoStatus, Secretaria } from "@/lib/compras";
-import { secretariaKeys } from "@/lib/compras";
 import { consultar, emTransacao } from "@/lib/db";
 
 /** A coluna `fonte` guarda o rotulo; a interface trabalha com as tres chaves fixas. */
@@ -47,10 +46,12 @@ const selecaoItens = `
   where i.processo_id = any($1::int[])
   order by i.numero_item`;
 
-function paraItem(linha: LinhaItem): LoteItem {
-  const quantidades = Object.fromEntries(
-    secretariaKeys.map((chave) => [chave, Number(linha.quantidades?.[chave] ?? 0)]),
-  ) as Record<Secretaria, number>;
+function paraItem(linha: LinhaItem, chaves: string[]): LoteItem {
+  const gravadas = Object.entries(linha.quantidades ?? {}).map(([chave, valor]) => [chave, Number(valor)]);
+  const quantidades = {
+    ...Object.fromEntries(chaves.map((chave) => [chave, 0])),
+    ...Object.fromEntries(gravadas),
+  } as Record<Secretaria, number>;
   const cotacoes = { bnc: 0, pncp: 0, mercado: 0 };
   for (const [fonte, valor] of Object.entries(linha.cotacoes ?? {})) {
     const chave = chavePorFonte[fonte];
@@ -80,20 +81,24 @@ function paraProcesso(linha: LinhaProcesso, itens: LoteItem[]): Processo {
   };
 }
 
-async function montar(linhas: LinhaProcesso[]) {
+async function montar(prefeituraId: number, linhas: LinhaProcesso[]) {
   if (!linhas.length) return [];
-  const itens = await consultar<LinhaItem>(selecaoItens, [linhas.map((linha) => linha.id)]);
+  const [itens, secretarias] = await Promise.all([
+    consultar<LinhaItem>(selecaoItens, [linhas.map((linha) => linha.id)]),
+    consultar<{ chave: string }>("select chave from secretarias where prefeitura_id = $1 order by ordem", [prefeituraId]),
+  ]);
+  const chaves = secretarias.map((secretaria) => secretaria.chave);
   const porProcesso = new Map<number, LoteItem[]>();
   for (const linha of itens) {
     const lista = porProcesso.get(linha.processo_id) ?? [];
-    lista.push(paraItem(linha));
+    lista.push(paraItem(linha, chaves));
     porProcesso.set(linha.processo_id, lista);
   }
   return linhas.map((linha) => paraProcesso(linha, porProcesso.get(linha.id) ?? []));
 }
 
 export async function listarProcessos(prefeituraId: number) {
-  return montar(await consultar<LinhaProcesso>(
+  return montar(prefeituraId, await consultar<LinhaProcesso>(
     `${selecaoProcesso} where p.prefeitura_id = $1 order by p.prazo_limite nulls last, p.numero_processo`,
     [prefeituraId],
   ));
@@ -104,7 +109,7 @@ export async function lerProcesso(prefeituraId: number, numero: string) {
     `${selecaoProcesso} where p.prefeitura_id = $1 and p.numero_processo = $2`,
     [prefeituraId, numero],
   );
-  return (await montar(linhas))[0] ?? null;
+  return (await montar(prefeituraId, linhas))[0] ?? null;
 }
 
 /**
@@ -127,6 +132,9 @@ export async function salvarLote(
     )) as Array<{ id: number }>;
     if (!processo) return false;
 
+    // As secretarias sao as que a prefeitura tem hoje, e nao uma lista fixa.
+    const secretarias = (await executar("select id, chave from secretarias where prefeitura_id = $1", [prefeituraId])) as Array<{ id: number; chave: string }>;
+
     await executar("delete from itens_lote where processo_id = $1 and not (numero_item = any($2::int[]))", [
       processo.id,
       dados.itens.map((item) => item.item),
@@ -141,13 +149,13 @@ export async function salvarLote(
         [processo.id, item.item, item.especificacao, item.unidade],
       )) as Array<{ id: number }>;
 
-      for (const chave of secretariaKeys) {
+      for (const secretaria of secretarias) {
         await executar(
           `insert into item_quantidades (item_id, secretaria_id, quantidade, atualizado_por_id)
-           values ($1, (select id from secretarias where prefeitura_id = $2 and chave = $3), $4, $5)
+           values ($1, $2, $3, $4)
            on conflict (item_id, secretaria_id)
            do update set quantidade = excluded.quantidade, atualizado_por_id = excluded.atualizado_por_id, atualizado_em = now()`,
-          [linha.id, prefeituraId, chave, item.quantidades[chave] ?? 0, autorId],
+          [linha.id, secretaria.id, Number(item.quantidades[secretaria.chave] ?? 0), autorId],
         );
       }
 

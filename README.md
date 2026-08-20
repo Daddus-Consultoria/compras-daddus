@@ -180,9 +180,23 @@ Para criar o primeiro superadmin num banco novo, rode `npm run db:semear`: ele
 imprime os acessos criados e a senha inicial uma unica vez. Defina `SENHA_SEED`
 para escolher a senha; sem isso, uma e sorteada.
 
-## Limitacao conhecida
+## Secretarias
 
-As quatro secretarias (Educacao, Saude, Assistencia Social e Administracao) sao
-fixas: toda prefeitura nasce com elas e as colunas do lote seguem essa lista. A
-tabela `secretarias` ja e por prefeitura, entao permitir que cada municipio
-defina as suas e mudanca de interface, nao de modelagem.
+Cada prefeitura cadastra quantas secretarias precisar, em Configuracao da
+prefeitura. Uma prefeitura nova nasce com Educacao, Saude, Assistencia Social e
+Administracao apenas para nao comecar vazia.
+
+Cada secretaria vira uma coluna na planilha do lote e pode ter usuarios
+proprios. O nome e editavel; a `chave`, nao — e ela que amarra as quantidades
+ja lancadas, entao renomear "Meio Ambiente" para "Meio Ambiente e
+Sustentabilidade" preserva todo o historico.
+
+Secretarias criadas depois de um lote aparecem nele com quantidade zero, sem
+invalidar o que ja estava gravado.
+
+Para tirar uma secretaria de circulacao ha duas saidas:
+
+- **Desativar** tira a secretaria do formulario de solicitacao e trava a coluna
+  na planilha, mas preserva o que ja foi lancado. E o caminho normal.
+- **Excluir** so funciona se ela nunca foi usada. Havendo quantidade, processo,
+  solicitacao ou usuario ligado, a API recusa e diz exatamente o que prende.

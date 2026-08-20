@@ -1,3 +1,4 @@
+import { secretariasPadrao } from "@/lib/compras";
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
 
 export type Prefeitura = {
@@ -68,14 +69,7 @@ export function gerarSlug(nome: string) {
     .slice(0, 60);
 }
 
-const secretariasPadrao = [
-  { chave: "educacao", nome: "Educacao" },
-  { chave: "saude", nome: "Saude" },
-  { chave: "assistencia", nome: "Assist. Social" },
-  { chave: "administracao", nome: "Administracao" },
-];
-
-/** Toda prefeitura nasce com as quatro secretarias padrao, senao nao ha onde lancar quantidade. */
+/** Nasce com as secretarias padrao; depois o administrador cadastra as que faltarem. */
 export async function criarPrefeitura(dados: { nome: string; estado: string; cnpj: string; enderecoCompras: string }) {
   return emTransacao(async (executar) => {
     const base = gerarSlug(dados.nome) || "prefeitura";

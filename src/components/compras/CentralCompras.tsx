@@ -3,7 +3,7 @@
 import { AppShell } from "@/components/compras/AppShell";
 import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
-import { loadRascunho, loteTotal, money, nomeSecretaria, processoStatusLabels, saveRascunho, statusTone, type Processo } from "@/lib/compras";
+import { loadRascunho, loteTotal, money, nomeSecretaria, processoStatusLabels, saveRascunho, statusTone, type Processo, type SecretariaInfo } from "@/lib/compras";
 import { ArrowUpRight, BellRing, CalendarClock, CheckCircle2, ClipboardList, FileText, Plus, Search, Timer } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -24,7 +24,7 @@ function parseDataBr(valor: string) {
   return new Date(ano, (mes || 1) - 1, dia || 1).getTime();
 }
 
-export function CentralCompras({ processos, sessao }: { processos: Processo[]; sessao: Sessao }) {
+export function CentralCompras({ processos, sessao, secretarias }: { processos: Processo[]; sessao: Sessao; secretarias: SecretariaInfo[] }) {
   const [busca, setBusca] = useState("");
   const [solicitacoes, setSolicitacoes] = useState<unknown[]>([]);
   const [nota, setNota] = useState("");
@@ -56,10 +56,10 @@ export function CentralCompras({ processos, sessao }: { processos: Processo[]; s
     const termo = busca.trim().toLowerCase();
     if (!termo) return processos;
     return processos.filter((processo) =>
-      [processo.id, processo.objeto, nomeSecretaria(processo.secretariaSolicitante), processoStatusLabels[processo.status]]
+      [processo.id, processo.objeto, nomeSecretaria(secretarias, processo.secretariaSolicitante), processoStatusLabels[processo.status]]
         .some((campo) => campo.toLowerCase().includes(termo)),
     );
-  }, [busca, processos]);
+  }, [busca, processos, secretarias]);
 
   const emCotacao = processos.filter((processo) => processo.status === "em_cotacao").length;
   const valorEstimado = processos.reduce((total, processo) => total + loteTotal(processo.itens), 0);
@@ -128,7 +128,7 @@ export function CentralCompras({ processos, sessao }: { processos: Processo[]; s
               <tbody>
                 {processosFiltrados.map((processo) => (
                   <tr key={processo.id}>
-                    <td><strong>PE {processo.id}</strong><small>{nomeSecretaria(processo.secretariaSolicitante)}</small></td>
+                    <td><strong>PE {processo.id}</strong><small>{nomeSecretaria(secretarias, processo.secretariaSolicitante)}</small></td>
                     <td>{processo.objeto}</td>
                     <td><span className="deadline"><CalendarClock size={14} /> {processo.prazoLimite}</span></td>
                     <td><span className={`daddus-status ${statusTone(processo.status)}`}>{processoStatusLabels[processo.status]}</span></td>

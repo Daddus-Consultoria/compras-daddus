@@ -1,6 +1,7 @@
-import { demoProcessos, findProcesso } from "@/lib/compras";
+import { demoProcessos, findProcesso, secretariasDemo } from "@/lib/compras";
 import { modoDemonstracao } from "@/lib/auth/sessao";
 import { lerProcesso, listarProcessos } from "@/lib/repositorio/processos";
+import { listarSecretarias } from "@/lib/repositorio/secretarias";
 
 export type OrigemDados = "postgres" | "memoria";
 
@@ -27,5 +28,15 @@ export async function obterProcesso(prefeituraId: number | null, numero: string)
     return { origem: "postgres" as OrigemDados, processo: await lerProcesso(prefeituraId, numero) };
   } catch {
     return { origem: "memoria" as OrigemDados, processo: findProcesso(numero) ?? null };
+  }
+}
+
+/** Secretarias da prefeitura da sessao, com as de exemplo no modo demonstracao. */
+export async function obterSecretarias(prefeituraId: number | null) {
+  if (modoDemonstracao() || prefeituraId === null) return secretariasDemo;
+  try {
+    return await listarSecretarias(prefeituraId);
+  } catch {
+    return secretariasDemo;
   }
 }

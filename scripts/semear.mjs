@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import pg from "pg";
 import { gerarHash } from "../src/lib/auth/senha.ts";
-import { demoProcessos, secretariaLabels } from "../src/lib/compras.ts";
+import { demoProcessos, secretariasPadrao } from "../src/lib/compras.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -34,12 +34,11 @@ try {
   );
   const prefeituraId = linhasPrefeitura[0].id;
 
-  const chaves = Object.keys(secretariaLabels);
-  for (const [ordem, chave] of chaves.entries()) {
+  for (const [ordem, secretaria] of secretariasPadrao.entries()) {
     await cliente.query(
       `insert into secretarias (prefeitura_id, chave, nome, ordem) values ($1, $2, $3, $4)
        on conflict (prefeitura_id, chave) do update set nome = excluded.nome, ordem = excluded.ordem`,
-      [prefeituraId, chave, secretariaLabels[chave], ordem + 1],
+      [prefeituraId, secretaria.chave, secretaria.nome, ordem + 1],
     );
   }
   const { rows: secretarias } = await cliente.query("select id, chave from secretarias where prefeitura_id = $1", [prefeituraId]);

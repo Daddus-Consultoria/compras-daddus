@@ -109,10 +109,3 @@ export async function definirAtivo(id: number, ativo: boolean) {
 export async function registrarAcesso(id: number) {
   await consultar("update usuarios set ultimo_acesso = now() where id = $1", [id]);
 }
-
-export async function listarSecretarias(prefeituraId: number) {
-  return consultar<{ id: number; chave: Secretaria; nome: string }>(
-    "select id, chave, nome from secretarias where prefeitura_id = $1 order by ordem",
-    [prefeituraId],
-  );
-}
