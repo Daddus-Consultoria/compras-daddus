@@ -11,6 +11,7 @@ import {
   loteTotal,
   money,
   nextItemNumber,
+  processoStatusLabels,
   quotesFilled,
   saveRascunho,
   secretariaKeys,
@@ -118,7 +119,7 @@ function ProcessoEditor({ processo }: { processo: Processo }) {
       </div>
 
       <div className="daddus-process-meta">
-        <div><span>Status</span><strong className={`daddus-status ${statusTone(processo.status)}`}>{processo.status}</strong></div>
+        <div><span>Status</span><strong className={`daddus-status ${statusTone(processo.status)}`}>{processoStatusLabels[processo.status]}</strong></div>
         <div><span>Prazo limite</span><strong>{processo.prazoLimite}</strong></div>
         <div><span>Responsavel</span><strong>{processo.responsavel}</strong></div>
         <div><span>Ultima atualizacao</span><strong>{dirty ? "Alteracoes nao salvas" : processo.atualizadoEm}</strong></div>

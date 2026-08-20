@@ -23,7 +23,27 @@ export type PrefeituraConfig = {
   enderecoCompras: string;
 };
 
-export type ProcessoStatus = "Em elaboracao" | "Em cotacao" | "Aguardando aprovacao";
+/** Os valores sao os mesmos do enum processo_status no banco. */
+export type ProcessoStatus = "em_montagem" | "coleta_quantidades" | "em_cotacao" | "enviado_licitacao" | "cancelado";
+
+export const processoStatusLabels: Record<ProcessoStatus, string> = {
+  em_montagem: "Em elaboracao",
+  coleta_quantidades: "Coleta de quantidades",
+  em_cotacao: "Em cotacao",
+  enviado_licitacao: "Enviado para licitacao",
+  cancelado: "Cancelado",
+};
+
+/** Os valores sao os mesmos do enum solicitacao_status no banco. */
+export type SolicitacaoStatus = "pendente" | "em_cotacao" | "em_licitacao" | "concluido" | "recusado";
+
+export const solicitacaoStatusLabels: Record<SolicitacaoStatus, string> = {
+  pendente: "Pendente",
+  em_cotacao: "Em cotacao",
+  em_licitacao: "Em licitacao",
+  concluido: "Concluido",
+  recusado: "Recusado",
+};
 
 export type Processo = {
   id: string;
@@ -50,7 +70,7 @@ export const demoProcessos: Processo[] = [
     id: "2026-0142",
     objeto: "Material de expediente para as secretarias",
     prazoLimite: "28/08/2026",
-    status: "Em cotacao",
+    status: "em_cotacao",
     solicitante: "Secretaria de Administracao",
     responsavel: "Marina Alves",
     atualizadoEm: "Hoje, 14:32",
@@ -64,7 +84,7 @@ export const demoProcessos: Processo[] = [
     id: "2026-0138",
     objeto: "Medicamentos e insumos hospitalares",
     prazoLimite: "02/09/2026",
-    status: "Aguardando aprovacao",
+    status: "enviado_licitacao",
     solicitante: "Secretaria de Saude",
     responsavel: "Marina Alves",
     atualizadoEm: "Ontem, 09:15",
@@ -79,7 +99,7 @@ export const demoProcessos: Processo[] = [
     id: "2026-0129",
     objeto: "Manutencao preventiva de veiculos",
     prazoLimite: "10/09/2026",
-    status: "Em elaboracao",
+    status: "em_montagem",
     solicitante: "Secretaria de Educacao",
     responsavel: "Marina Alves",
     atualizadoEm: "18/08/2026, 16:40",
@@ -96,8 +116,8 @@ export function findProcesso(id: string) {
 }
 
 export function statusTone(status: ProcessoStatus) {
-  if (status === "Em cotacao") return "blue";
-  if (status === "Aguardando aprovacao") return "yellow";
+  if (status === "em_cotacao") return "blue";
+  if (status === "enviado_licitacao" || status === "coleta_quantidades") return "yellow";
   return "gray";
 }
 

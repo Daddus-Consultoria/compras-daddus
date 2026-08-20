@@ -68,63 +68,57 @@ git remote add origin https://github.com/Daddus-Consultoria/compras-daddus.git
 
 Na Vercel e no Railway, importe `Daddus-Consultoria/compras-daddus`. Nao importe `site-daddus` e nao configure Root Directory apontando para uma subpasta: a raiz do projeto ja e a raiz deste repositorio.
 
-## Arquitetura planejada
+## Arquitetura
 
 - Frontend e rotas: Next.js com App Router
-- Persistencia: PostgreSQL
-- Autenticacao: Auth.js
+- Persistencia: PostgreSQL, acessado pelo driver `pg` (sem ORM)
+- Autenticacao: ainda nao implementada
 - Deploy web: Vercel ou Railway, sempre como projeto independente
 
-## Strapi compartilhado com o site
+O navegador nunca fala com o banco. As telas chamam as rotas em `src/app/api/*`,
+que rodam no servidor e sao as unicas donas da `DATABASE_URL`.
 
-O Compras pode usar a mesma instância Strapi do site, sem misturar os dados. Crie nela os seguintes tipos de conteúdo:
+## Banco de dados
 
-- **Single Type `config-prefeitura`**: `estado`, `nome`, `cnpj`, `logo` (Media, single image), `enderecoCompras`
-- **Collection Type `solicitacao`**: `objeto`, `justificativa`, `secretaria`, `termoReferencia`, `status`, `createdAt`
-- **Collection Type `processo-compra`**: `numero`, `objeto`, `prazoLimite`, `status`, `solicitante`, `comentarios`
-- **Collection Type `item-lote`**: `item`, `especificacao`, `unidade`, quantidades por secretaria e valores de cotacao
-
-No projeto Compras, configure as variaveis privadas da Vercel e do Railway:
+Configure a variavel privada, tanto no `.env.local` quanto no painel do provedor
+de deploy. Qualquer Postgres serve (Neon, Supabase, Railway); use a string de
+conexao com pooling quando o provedor oferecer.
 
 ```env
-STRAPI_URL=https://seu-strapi.dominio.com
-STRAPI_API_TOKEN=token-do-strapi-com-permissao-apenas-nos-tipos-do-compras
+DATABASE_URL=postgres://usuario:senha@host:5432/banco?sslmode=require
 ```
 
-O token deve ser um token de API do Strapi com permissao minima para esses tipos. Nao use `STRAPI_API_TOKEN` no navegador e nao reutilize o token administrativo do site. As rotas `/api/config-prefeitura` e `/api/solicitacoes` ja usam o Strapi quando essas variaveis existem e retornam dados mockados apenas quando nao existem, para facilitar o desenvolvimento local.
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
+Aplicar a estrutura e, se quiser, os dados de demonstracao:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run db:migrar   # aplica db/migrations/*.sql, uma vez cada
+npm run db:semear   # secretarias, config do municipio e 3 processos de exemplo
+npm run db:resetar  # apaga tudo e recria (nao use em producao)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Para desenvolver sem depender de um banco na nuvem:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+docker run -d --name pg-compras -e POSTGRES_PASSWORD=compras -e POSTGRES_USER=compras \
+  -e POSTGRES_DB=compras -p 5433:5432 postgres:16-alpine
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Sem `DATABASE_URL` o app ainda sobe, porem guarda os dados apenas na memoria do
+processo e mostra o aviso "Dados em memoria" na barra lateral. Isso serve para
+demonstracao, nao para uso real: os dados somem a cada reinicio.
 
-## Learn More
+### Estrutura
 
-To learn more about Next.js, take a look at the following resources:
+| Tabela | Para que serve |
+| --- | --- |
+| `secretarias` | Secretarias do municipio; a `chave` identifica a coluna de quantidade |
+| `config_prefeitura` | Linha unica com os dados institucionais e a logo (guardada como bytes) |
+| `processos_compra` | Processo licitatorio, com numero, objeto, prazo e status |
+| `itens_lote` | Itens de cada processo |
+| `item_quantidades` | Quantidade por item e por secretaria, uma linha cada |
+| `cotacoes` | Cotacoes do item, com `fonte` (BNC, PNCP, Mercado) e valor |
+| `solicitacoes` | Pedidos abertos pelas secretarias |
+| `tarefas_processo` | Tarefas internas ligadas a um processo |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A logo e servida por `GET /api/config-prefeitura/logo`, com um sufixo de versao
+na URL para invalidar o cache do navegador quando ela e trocada.

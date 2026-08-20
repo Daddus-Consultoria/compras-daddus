@@ -1,7 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/compras/AppShell";
-import { secretariaLabels, type Secretaria } from "@/lib/compras";
+import { secretariaLabels, solicitacaoStatusLabels, type Secretaria, type SolicitacaoStatus } from "@/lib/compras";
 import { AlertTriangle, CheckCircle2, Paperclip, Send } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
@@ -9,8 +9,8 @@ type Solicitacao = {
   id: string;
   objeto: string;
   justificativa: string;
-  secretaria: Secretaria;
-  status: string;
+  secretaria: Secretaria | null;
+  status: SolicitacaoStatus;
   createdAt: string;
 };
 
@@ -144,9 +144,9 @@ export default function SolicitacoesPage() {
               {enviadas.map((solicitacao) => (
                 <tr key={solicitacao.id}>
                   <td>{formatarData(solicitacao.createdAt)}</td>
-                  <td>{secretariaLabels[solicitacao.secretaria] || solicitacao.secretaria}</td>
+                  <td>{solicitacao.secretaria ? secretariaLabels[solicitacao.secretaria] : "-"}</td>
                   <td>{solicitacao.objeto}</td>
-                  <td><span className="daddus-status gray">{solicitacao.status || "Recebida"}</span></td>
+                  <td><span className="daddus-status gray">{solicitacaoStatusLabels[solicitacao.status] || solicitacao.status}</span></td>
                 </tr>
               ))}
               {!enviadas.length && (

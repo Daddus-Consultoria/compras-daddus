@@ -1,7 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/compras/AppShell";
-import { demoProcessos, loadRascunho, loteTotal, money, saveRascunho, statusTone } from "@/lib/compras";
+import { demoProcessos, loadRascunho, loteTotal, money, processoStatusLabels, saveRascunho, statusTone } from "@/lib/compras";
 import { ArrowUpRight, BellRing, CalendarClock, CheckCircle2, ClipboardList, FileText, Plus, Search, Timer } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -53,11 +53,11 @@ export default function ComprasPage() {
     const termo = busca.trim().toLowerCase();
     if (!termo) return demoProcessos;
     return demoProcessos.filter((processo) =>
-      [processo.id, processo.objeto, processo.solicitante, processo.status].some((campo) => campo.toLowerCase().includes(termo)),
+      [processo.id, processo.objeto, processo.solicitante, processoStatusLabels[processo.status]].some((campo) => campo.toLowerCase().includes(termo)),
     );
   }, [busca]);
 
-  const emCotacao = demoProcessos.filter((processo) => processo.status === "Em cotacao").length;
+  const emCotacao = demoProcessos.filter((processo) => processo.status === "em_cotacao").length;
   const valorEstimado = demoProcessos.reduce((total, processo) => total + loteTotal(processo.itens), 0);
   const proximoPrazo = [...demoProcessos].sort((a, b) => parseDataBr(a.prazoLimite) - parseDataBr(b.prazoLimite))[0];
 
@@ -125,7 +125,7 @@ export default function ComprasPage() {
                     <td><strong>PE {processo.id}</strong><small>{processo.solicitante}</small></td>
                     <td>{processo.objeto}</td>
                     <td><span className="deadline"><CalendarClock size={14} /> {processo.prazoLimite}</span></td>
-                    <td><span className={`daddus-status ${statusTone(processo.status)}`}>{processo.status}</span></td>
+                    <td><span className={`daddus-status ${statusTone(processo.status)}`}>{processoStatusLabels[processo.status]}</span></td>
                     <td><Link href={`/painel/compras/processo/${processo.id}`} className="daddus-row-action">Abrir <ArrowUpRight size={14} /></Link></td>
                   </tr>
                 ))}
