@@ -1,0 +1,12 @@
+"use client";
+
+import type { LoteItem, PrefeituraConfig } from "@/lib/compras";
+import { itemAverage, itemTotalQuantity, money } from "@/lib/compras";
+import { FileDown } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
+export function ExportLicitacaoPDF({ items, prefeitura, objeto, solicitante, notas }: { items: LoteItem[]; prefeitura: PrefeituraConfig; objeto: string; solicitante: string; notas: string }) {
+  const exportPdf = () => { const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" }); pdf.setTextColor(20, 20, 20); pdf.setFontSize(10); pdf.text(prefeitura.estado || "UF", 14, 14); pdf.setFontSize(14); pdf.setFont("helvetica", "bold"); pdf.text(prefeitura.nome || "PREFEITURA MUNICIPAL", 14, 21); pdf.setFontSize(10); pdf.setFont("helvetica", "normal"); pdf.text("SETOR DE COMPRAS / ORCAMENTOS", 14, 28); pdf.text(`CNPJ: ${prefeitura.cnpj || "Nao informado"}`, 14, 34); pdf.setDrawColor(160, 160, 160); pdf.line(14, 39, 283, 39); pdf.setFont("helvetica", "bold"); pdf.text("MAPA DE COMPOSICAO E COTACOES", 14, 48); pdf.setFont("helvetica", "normal"); pdf.text(`Objeto: ${objeto}`, 14, 55); pdf.text(`Solicitante: ${solicitante}`, 14, 61); autoTable(pdf, { startY: 68, head: [["Item", "Especificacao detalhada", "Un.", "Educacao", "Saude", "Assist. Social", "Administracao", "Qtd. total", "BNC", "PNCP", "Mercado", "Valor medio", "Valor total"]], body: items.map((item) => [item.item, item.especificacao, item.unidade, item.quantidades.educacao, item.quantidades.saude, item.quantidades.assistencia, item.quantidades.administracao, itemTotalQuantity(item), money(item.cotacoes.bnc), money(item.cotacoes.pncp), money(item.cotacoes.mercado), money(itemAverage(item)), money(itemAverage(item) * itemTotalQuantity(item))]), styles: { fontSize: 7, cellPadding: 2 }, headStyles: { fillColor: [150, 24, 48] }, alternateRowStyles: { fillColor: [248, 248, 248] } }); const finalY = (pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 170; pdf.setFontSize(9); pdf.text(`Comentarios do processo: ${notas || "Nenhum comentario registrado."}`, 14, finalY + 12); pdf.text(`Emitido em ${new Date().toLocaleDateString("pt-BR")}`, 14, finalY + 22); pdf.line(205, finalY + 27, 270, finalY + 27); pdf.text("Responsavel por Compras", 220, finalY + 33); pdf.save("mapa-licitacao.pdf"); };
+  return <button type="button" className="daddus-secondary-button" onClick={exportPdf}><FileDown size={16} /> Exportar PDF oficial</button>;
+}

@@ -1,3 +1,79 @@
+# Compras Daddus
+
+Sistema de gestao de compras da Daddus. Este e um repositorio independente do site institucional e deve ser conectado como um projeto separado nas plataformas de deploy.
+
+## Desenvolvimento local
+
+```bash
+npm install
+npm run dev
+```
+
+Acesse [http://localhost:3000](http://localhost:3000).
+
+## Validacao
+
+```bash
+npm run lint
+npm run build
+```
+
+## Deploy separado
+
+O repositorio deste projeto deve ser publicado separadamente do repositorio `site-daddus`.
+
+### Vercel
+
+1. Crie um novo projeto na Vercel.
+2. Importe o repositorio `compras-daddus`.
+3. Mantenha a raiz do projeto como `/`.
+4. Adicione o dominio `compras.daddusconsultoria.com` em **Settings > Domains**.
+5. Configure no DNS o registro indicado pela Vercel.
+
+O arquivo `vercel.json` fixa os comandos de instalacao e build do projeto.
+
+### Railway
+
+1. Crie um novo projeto no Railway.
+2. Adicione um servico conectado ao repositorio `compras-daddus`.
+3. Nao use o repositorio do site institucional nesse servico.
+4. Configure as variaveis de ambiente do banco e da autenticacao quando esses modulos forem implementados.
+5. Use o dominio gerado pelo Railway ou adicione `compras.daddusconsultoria.com` em **Settings > Networking > Custom Domain**.
+
+O arquivo `railway.toml` define o build, o comando de inicializacao e o health check.
+
+## GitHub: repositorio correto
+
+O projeto Compras deve ter um repositorio proprio, separado de `Daddus-Consultoria/site-daddus`.
+
+1. No GitHub, clique em **New repository**.
+2. Use o nome `compras-daddus` e escolha a organizacao `Daddus-Consultoria`.
+3. Nao marque a opcao de criar README, `.gitignore` ou licenca, pois este projeto ja possui esses arquivos.
+4. No terminal, dentro desta pasta, conecte o repositorio e envie a branch principal:
+
+```bash
+cd /workspaces/compras-daddus
+git remote add origin git@github.com:Daddus-Consultoria/compras-daddus.git
+git add .
+git commit -m "feat: cria modulo de compras municipal"
+git branch -M main
+git push -u origin main
+```
+
+Se preferir HTTPS, troque o remote por:
+
+```bash
+git remote add origin https://github.com/Daddus-Consultoria/compras-daddus.git
+```
+
+Na Vercel e no Railway, importe `Daddus-Consultoria/compras-daddus`. Nao importe `site-daddus` e nao configure Root Directory apontando para uma subpasta: a raiz do projeto ja e a raiz deste repositorio.
+
+## Arquitetura planejada
+
+- Frontend e rotas: Next.js com App Router
+- Persistencia: PostgreSQL
+- Autenticacao: Auth.js
+- Deploy web: Vercel ou Railway, sempre como projeto independente
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
