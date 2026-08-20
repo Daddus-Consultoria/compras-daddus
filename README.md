@@ -74,6 +74,24 @@ Na Vercel e no Railway, importe `Daddus-Consultoria/compras-daddus`. Nao importe
 - Persistencia: PostgreSQL
 - Autenticacao: Auth.js
 - Deploy web: Vercel ou Railway, sempre como projeto independente
+
+## Strapi compartilhado com o site
+
+O Compras pode usar a mesma instância Strapi do site, sem misturar os dados. Crie nela os seguintes tipos de conteúdo:
+
+- **Single Type `config-prefeitura`**: `estado`, `nome`, `cnpj`, `logo` (Media, single image), `enderecoCompras`
+- **Collection Type `solicitacao`**: `objeto`, `justificativa`, `secretaria`, `termoReferencia`, `status`, `createdAt`
+- **Collection Type `processo-compra`**: `numero`, `objeto`, `prazoLimite`, `status`, `solicitante`, `comentarios`
+- **Collection Type `item-lote`**: `item`, `especificacao`, `unidade`, quantidades por secretaria e valores de cotacao
+
+No projeto Compras, configure as variaveis privadas da Vercel e do Railway:
+
+```env
+STRAPI_URL=https://seu-strapi.dominio.com
+STRAPI_API_TOKEN=token-do-strapi-com-permissao-apenas-nos-tipos-do-compras
+```
+
+O token deve ser um token de API do Strapi com permissao minima para esses tipos. Nao use `STRAPI_API_TOKEN` no navegador e nao reutilize o token administrativo do site. As rotas `/api/config-prefeitura` e `/api/solicitacoes` ja usam o Strapi quando essas variaveis existem e retornam dados mockados apenas quando nao existem, para facilitar o desenvolvimento local.
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
