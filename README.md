@@ -122,3 +122,22 @@ demonstracao, nao para uso real: os dados somem a cada reinicio.
 
 A logo e servida por `GET /api/config-prefeitura/logo`, com um sufixo de versao
 na URL para invalidar o cache do navegador quando ela e trocada.
+
+## Rotas de API
+
+Todas rodam no servidor; o navegador nunca recebe a `DATABASE_URL`.
+
+| Rota | Metodo | Para que serve |
+| --- | --- | --- |
+| `/api/status` | GET | Diz se os dados vem do Postgres ou do fallback em memoria |
+| `/api/config-prefeitura` | GET, PUT | Dados institucionais do municipio; o PUT aceita `multipart` com a logo |
+| `/api/config-prefeitura/logo` | GET | Devolve os bytes da logo guardada |
+| `/api/solicitacoes` | GET, POST | Pedidos abertos pelas secretarias |
+| `/api/processos` | GET | Processos com seus itens, quantidades e cotacoes |
+| `/api/processos/[numero]/lote` | PUT | Grava o lote inteiro numa transacao |
+
+O `PUT` do lote recebe o estado desejado completo (`{ notas, itens }`) e
+reconcilia por `numero_item`: itens ausentes sao removidos, os demais sao
+inseridos ou atualizados. Assim a tela nao precisa administrar ids de itens
+que ainda nao existem no banco. Qualquer item malformado rejeita o lote
+inteiro, para nao gravar pela metade.

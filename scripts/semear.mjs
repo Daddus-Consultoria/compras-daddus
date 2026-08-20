@@ -41,12 +41,14 @@ try {
 
   for (const processo of demoProcessos) {
     const { rows } = await cliente.query(
-      `insert into processos_compra (numero_processo, objeto, prazo_limite, status, responsavel)
-       values ($1, $2, $3, $4, $5)
+      `insert into processos_compra (numero_processo, objeto, prazo_limite, status, secretaria_solicitante_id, responsavel)
+       values ($1, $2, $3, $4, $5, $6)
        on conflict (numero_processo) do update set objeto = excluded.objeto, prazo_limite = excluded.prazo_limite,
-         status = excluded.status, responsavel = excluded.responsavel
+         status = excluded.status, secretaria_solicitante_id = excluded.secretaria_solicitante_id,
+         responsavel = excluded.responsavel
        returning id`,
-      [processo.id, processo.objeto, paraDataIso(processo.prazoLimite), processo.status, processo.responsavel],
+      [processo.id, processo.objeto, paraDataIso(processo.prazoLimite), processo.status,
+       idPorChave[processo.secretariaSolicitante], processo.responsavel],
     );
     const processoId = rows[0].id;
 

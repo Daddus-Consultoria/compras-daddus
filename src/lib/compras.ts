@@ -50,9 +50,10 @@ export type Processo = {
   objeto: string;
   prazoLimite: string;
   status: ProcessoStatus;
-  solicitante: string;
+  secretariaSolicitante: Secretaria | null;
   responsavel: string;
   atualizadoEm: string;
+  notas: string;
   itens: LoteItem[];
 };
 
@@ -63,7 +64,19 @@ export const secretariaLabels: Record<Secretaria, string> = {
   administracao: "Administracao",
 };
 
+/** Rotulo curto, usado nos cabecalhos da planilha, onde a coluna e estreita. */
 export const secretariaKeys = Object.keys(secretariaLabels) as Secretaria[];
+
+const secretariaNomes: Record<Secretaria, string> = {
+  educacao: "Educacao",
+  saude: "Saude",
+  assistencia: "Assistencia Social",
+  administracao: "Administracao",
+};
+
+export function nomeSecretaria(chave: Secretaria | null) {
+  return chave ? `Secretaria de ${secretariaNomes[chave]}` : "Sem secretaria definida";
+}
 
 export const demoProcessos: Processo[] = [
   {
@@ -71,9 +84,10 @@ export const demoProcessos: Processo[] = [
     objeto: "Material de expediente para as secretarias",
     prazoLimite: "28/08/2026",
     status: "em_cotacao",
-    solicitante: "Secretaria de Administracao",
+    secretariaSolicitante: "administracao",
     responsavel: "Marina Alves",
     atualizadoEm: "Hoje, 14:32",
+    notas: "",
     itens: [
       { id: "0142-1", item: 1, especificacao: "Papel sulfite A4, branco, 75 g/m2, pacote com 500 folhas", unidade: "PCT", quantidades: { educacao: 120, saude: 45, assistencia: 25, administracao: 30 }, cotacoes: { bnc: 28.9, pncp: 29.5, mercado: 31.2 } },
       { id: "0142-2", item: 2, especificacao: "Caneta esferografica azul, corpo cristal, ponta media", unidade: "CX", quantidades: { educacao: 40, saude: 18, assistencia: 12, administracao: 20 }, cotacoes: { bnc: 42.5, pncp: 44, mercado: 45.9 } },
@@ -85,9 +99,10 @@ export const demoProcessos: Processo[] = [
     objeto: "Medicamentos e insumos hospitalares",
     prazoLimite: "02/09/2026",
     status: "enviado_licitacao",
-    solicitante: "Secretaria de Saude",
+    secretariaSolicitante: "saude",
     responsavel: "Marina Alves",
     atualizadoEm: "Ontem, 09:15",
+    notas: "",
     itens: [
       { id: "0138-1", item: 1, especificacao: "Dipirona sodica 500 mg, comprimido, caixa com 200 unidades", unidade: "CX", quantidades: { educacao: 0, saude: 180, assistencia: 40, administracao: 10 }, cotacoes: { bnc: 34.9, pncp: 36.2, mercado: 38.5 } },
       { id: "0138-2", item: 2, especificacao: "Luva de procedimento nao cirurgica, latex, tamanho M, caixa com 100", unidade: "CX", quantidades: { educacao: 0, saude: 320, assistencia: 60, administracao: 15 }, cotacoes: { bnc: 27.4, pncp: 28.9, mercado: 30.1 } },
@@ -100,9 +115,10 @@ export const demoProcessos: Processo[] = [
     objeto: "Manutencao preventiva de veiculos",
     prazoLimite: "10/09/2026",
     status: "em_montagem",
-    solicitante: "Secretaria de Educacao",
+    secretariaSolicitante: "educacao",
     responsavel: "Marina Alves",
     atualizadoEm: "18/08/2026, 16:40",
+    notas: "",
     itens: [
       { id: "0129-1", item: 1, especificacao: "Troca de oleo do motor com substituicao de filtro, veiculo leve", unidade: "SV", quantidades: { educacao: 18, saude: 8, assistencia: 5, administracao: 4 }, cotacoes: { bnc: 0, pncp: 0, mercado: 0 } },
       { id: "0129-2", item: 2, especificacao: "Alinhamento de direcao e balanceamento das quatro rodas, veiculo leve", unidade: "SV", quantidades: { educacao: 18, saude: 8, assistencia: 5, administracao: 4 }, cotacoes: { bnc: 0, pncp: 0, mercado: 0 } },
@@ -152,19 +168,7 @@ export function money(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export type LoteRascunho = {
-  itens: LoteItem[];
-  notas: string;
-};
-
-/**
- * Rascunho local, valido apenas neste navegador. E uma ponte ate os processos
- * serem persistidos no Strapi, quando `salvarLote` vira uma chamada de API.
- */
-export function loteStorageKey(processoId: string) {
-  return `daddus-compras:lote:${processoId}`;
-}
-
+/** Guarda a agenda pessoal do comprador, que e local a cada navegador. */
 export function loadRascunho<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {

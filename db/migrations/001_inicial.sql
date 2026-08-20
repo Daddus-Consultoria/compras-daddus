@@ -37,6 +37,7 @@ create table if not exists processos_compra (
   objeto          text            not null,
   prazo_limite    date,
   status          processo_status not null default 'em_montagem',
+  secretaria_solicitante_id integer references secretarias (id) on delete set null,
   responsavel     text            not null default '',
   notas_processo  text            not null default '',
   criado_em       timestamptz     not null default now(),

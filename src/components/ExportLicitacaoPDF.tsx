@@ -1,7 +1,7 @@
 "use client";
 
 import type { LoteItem, PrefeituraConfig, Processo } from "@/lib/compras";
-import { itemAverage, itemTotalQuantity, loteTotal, money } from "@/lib/compras";
+import { itemAverage, itemTotalQuantity, loteTotal, money, nomeSecretaria } from "@/lib/compras";
 import { FileDown } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -30,7 +30,7 @@ export function ExportLicitacaoPDF({ items, prefeitura, processo, notas }: { ite
     pdf.setFont("helvetica", "normal");
     pdf.text(`Processo: PE ${processo.id}`, margem, 55);
     pdf.text(`Objeto: ${processo.objeto}`, margem, 61, { maxWidth: larguraUtil });
-    pdf.text(`Solicitante: ${processo.solicitante}`, margem, 67);
+    pdf.text(`Solicitante: ${nomeSecretaria(processo.secretariaSolicitante)}`, margem, 67);
     pdf.text(`Prazo limite: ${processo.prazoLimite}`, 150, 55);
     pdf.text(`Status: ${processo.status}`, 150, 61);
 

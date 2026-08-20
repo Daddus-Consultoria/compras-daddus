@@ -1,5 +1,5 @@
 import type { PrefeituraConfig } from "@/lib/compras";
-import { consultarUm } from "@/lib/db";
+import { bancoConfigurado, consultarUm } from "@/lib/db";
 
 type LinhaConfig = {
   estado: string;
@@ -62,4 +62,15 @@ export async function lerLogo(): Promise<LogoArmazenada | null> {
   );
   if (!linha?.logo_mime || !linha.logo_dados) return null;
   return { mime: linha.logo_mime, dados: linha.logo_dados };
+}
+
+/** Versao tolerante para as telas: sem banco ou com erro, devolve config vazia. */
+export async function lerConfigOuPadrao(): Promise<PrefeituraConfig> {
+  const vazia: PrefeituraConfig = { estado: "", nome: "", cnpj: "", enderecoCompras: "", logoUrl: "" };
+  if (!bancoConfigurado()) return vazia;
+  try {
+    return await lerConfig();
+  } catch {
+    return vazia;
+  }
 }
