@@ -359,29 +359,31 @@ export type DadosNovoProcesso = {
  */
 export async function criarProcesso(prefeituraId: number, usuarioId: number | null, dados: DadosNovoProcesso) {
   return emTransacao(async (executar) => {
-    const [existente] = (await executar(
-      "select id from processos_compra where prefeitura_id = $1 and numero_processo = $2",
-      [prefeituraId, dados.numero],
-    )) as Array<{ id: number }>;
-    if (existente) return { erro: "numero-duplicado" as const };
-
+    // A unicidade e decidida pelo proprio indice, e nao por um select antes do
+    // insert: entre os dois cabia outra requisicao com o mesmo numero, e quem
+    // perdesse a corrida recebia o erro cru do Postgres em vez de 409.
     const [criado] = (await executar(
       `insert into processos_compra (prefeitura_id, numero_processo, objeto, prazo_limite, secretaria_solicitante_id, responsavel)
        values ($1, $2, $3, $4, (select id from secretarias where prefeitura_id = $1 and chave = $5), $6)
+       on conflict (prefeitura_id, numero_processo) do nothing
        returning id`,
       [prefeituraId, dados.numero, dados.objeto, paraDataIso(dados.prazoLimite), dados.secretaria, dados.responsavel],
     )) as Array<{ id: number }>;
+    if (!criado) return { erro: "numero-duplicado" as const };
 
     await executar(
       "insert into historico_status (processo_id, de, para, usuario_id, observacao) values ($1, null, 'em_montagem'::processo_status, $2, $3)",
       [criado.id, usuarioId, "Processo aberto."],
     );
 
-    // A solicitacao que virou processo deixa de ficar pendente na fila.
+    // A solicitacao que virou processo deixa de ficar pendente na fila e passa a
+    // apontar para o processo: e o primeiro elo da cadeia necessidade -> compra,
+    // e sem ele ninguem consegue dizer depois em que processo o pedido virou.
     if (dados.solicitacaoId) {
       await executar(
-        "update solicitacoes set status = 'em_cotacao'::solicitacao_status where id = $1 and prefeitura_id = $2 and status = 'pendente'",
-        [dados.solicitacaoId, prefeituraId],
+        `update solicitacoes set status = 'em_cotacao'::solicitacao_status, processo_id = $3
+         where id = $1 and prefeitura_id = $2 and status = 'pendente'`,
+        [dados.solicitacaoId, prefeituraId, criado.id],
       );
     }
 

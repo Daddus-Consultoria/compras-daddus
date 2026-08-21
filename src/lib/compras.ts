@@ -100,6 +100,19 @@ export function diferencasDeQuantidade(gravados: LoteItem[], enviados: LoteItem[
   return mudancas;
 }
 
+/**
+ * Confere formato e existencia da data: "31/02/2026" tem o formato certo e nao
+ * existe. Sem a segunda checagem, a data so seria recusada la no Postgres, e o
+ * usuario receberia um erro de banco em vez de "prazo invalido".
+ */
+export function dataBrValida(valor: string) {
+  const partes = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(valor);
+  if (!partes) return false;
+  const [, dia, mes, ano] = partes.map(Number);
+  const data = new Date(ano, mes - 1, dia);
+  return data.getFullYear() === ano && data.getMonth() === mes - 1 && data.getDate() === dia;
+}
+
 export type PrefeituraConfig = {
   estado: string;
   nome: string;

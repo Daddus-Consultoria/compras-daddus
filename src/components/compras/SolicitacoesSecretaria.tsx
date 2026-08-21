@@ -168,7 +168,9 @@ export function SolicitacoesSecretaria({ sessao, secretarias }: { sessao: Sessao
                           Gerar processo <ArrowUpRight size={14} />
                         </Link>
                       ) : (
-                        <span className="daddus-muted">atendida</span>
+                        // A situacao real ja esta na coluna ao lado; aqui so cabe
+                        // dizer que nao ha acao — "atendida" mentiria numa recusada.
+                        <span className="daddus-muted">-</span>
                       )}
                     </td>
                   )}

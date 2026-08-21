@@ -1,11 +1,11 @@
 import { podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
+import { dataBrValida } from "@/lib/compras";
 import { obterProcessos } from "@/lib/dados";
 import { criarProcesso, proximoNumeroProcesso } from "@/lib/repositorio/processos";
 import { listarSecretarias } from "@/lib/repositorio/secretarias";
 import { NextResponse } from "next/server";
 
-const dataBr = /^\d{2}\/\d{2}\/\d{4}$/;
 
 export async function GET(request: Request) {
   const sessao = await obterSessao();
@@ -49,8 +49,8 @@ export async function POST(request: Request) {
   if (!numero) return NextResponse.json({ error: "Informe o numero do processo." }, { status: 400 });
   if (numero.length > 40) return NextResponse.json({ error: "O numero do processo e longo demais." }, { status: 400 });
   if (!objeto) return NextResponse.json({ error: "Informe o objeto da compra." }, { status: 400 });
-  if (prazoLimite && !dataBr.test(prazoLimite)) {
-    return NextResponse.json({ error: "O prazo limite deve estar no formato DD/MM/AAAA." }, { status: 400 });
+  if (prazoLimite && !dataBrValida(prazoLimite)) {
+    return NextResponse.json({ error: `Prazo limite invalido: ${prazoLimite}. Use uma data real, no formato DD/MM/AAAA.` }, { status: 400 });
   }
 
   if (secretaria) {
