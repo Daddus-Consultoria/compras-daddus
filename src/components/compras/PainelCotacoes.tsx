@@ -24,12 +24,18 @@ import { FormEvent, useState } from "react";
 export function PainelCotacoes({
   item,
   editavel,
+  motivoBloqueio,
+  aoLiberar,
   aoCriar,
   aoAlterar,
   aoRemover,
 }: {
   item: LoteItem;
   editavel: boolean;
+  /** Por que o formulario nao aparece — some-lo sem explicar parece defeito. */
+  motivoBloqueio?: string;
+  /** Atalho para destravar o lancamento, quando o proprio usuario pode faze-lo. */
+  aoLiberar?: { rotulo: string; acao: () => void };
   aoCriar: (dados: Record<string, unknown>) => Promise<void>;
   aoAlterar: (id: number, dados: Record<string, unknown>) => Promise<void>;
   aoRemover: (id: number) => Promise<void>;
@@ -139,6 +145,17 @@ export function PainelCotacoes({
         </tbody>
       </table>
 
+      {!editavel && motivoBloqueio && (
+        <div className="daddus-inline-warning">
+          <Ban size={15} /> {motivoBloqueio}
+          {aoLiberar && (
+            <button type="button" className="daddus-secondary-button" onClick={aoLiberar.acao}>
+              {aoLiberar.rotulo}
+            </button>
+          )}
+        </div>
+      )}
+
       {editavel && (
         <form className="daddus-nova-cotacao" onSubmit={adicionar}>
           <label>Fonte
@@ -163,7 +180,7 @@ export function PainelCotacoes({
           </button>
         </form>
       )}
-      <p className="daddus-muted">{fonteDescricoes[fonte]}</p>
+      {editavel && <p className="daddus-muted">{fonteDescricoes[fonte]}</p>}
 
       {(item.ajustes?.length ?? 0) > 0 && (
         <div className="daddus-ajustes">

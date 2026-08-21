@@ -2,7 +2,8 @@
 
 import { papelLabels, type Papel } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
-import { Bell, Building2, ChevronDown, ClipboardList, Database, LayoutDashboard, LogOut, Settings2, ShoppingCart, Users } from "lucide-react";
+import { SinoNotificacoes } from "@/components/compras/SinoNotificacoes";
+import { Building2, ChevronDown, ClipboardList, Database, LayoutDashboard, LogOut, Settings2, ShoppingCart, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -125,9 +126,7 @@ export function AppShell({ children, sessao, titulo = "Compras" }: { children: R
             <h1>{titulo}</h1>
           </div>
           <div className="daddus-top-actions">
-            <button className="daddus-icon-button" type="button" aria-label="Notificacoes" disabled title="Ainda nao implementado">
-              <Bell size={19} /><i />
-            </button>
+            <SinoNotificacoes demonstracao={sessao.demonstracao} />
             <div className="daddus-user-context">
               <Users size={16} />
               <span>{contexto}</span>
