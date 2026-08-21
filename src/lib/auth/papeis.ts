@@ -14,10 +14,10 @@ export const papelLabels: Record<Papel, string> = {
 export const papelDescricoes: Record<Papel, string> = {
   superadmin: "Equipe Daddus. Cria prefeituras e usuarios de qualquer municipio.",
   admin: "Cria e desativa usuarios da propria prefeitura e edita os dados institucionais.",
-  compras: "Monta processos, lotes e cotacoes da prefeitura e cadastra os contratos.",
+  compras: "Monta processos, lotes e cotacoes da prefeitura, cadastra os contratos e autoriza os pedidos de fornecimento.",
   cpl: "Recebe o mapa de precos, registra a tramitacao e devolve o processo com o contrato.",
-  secretario: "Abre solicitacoes e preenche a quantidade da propria secretaria.",
-  gestor: "Acompanha processos e solicitacoes sem editar.",
+  secretario: "Abre solicitacoes, preenche a quantidade da propria secretaria e pede fornecimento nos contratos.",
+  gestor: "Acompanha processos, contratos e saldos sem editar.",
 };
 
 /** Papeis que um usuario pode criar. Superadmin cria qualquer um; admin, ninguem acima dele. */
@@ -64,6 +64,24 @@ export function podeGerenciarContratos(papel: Papel) {
 
 /** Contrato e saldo sao consultados por todo mundo que acompanha a compra. */
 export function podeVerContratos(papel: Papel) {
+  return papel !== "superadmin";
+}
+
+/**
+ * Pedir fornecimento e da secretaria, que e quem sabe o que falta. O Setor de
+ * Compras tambem abre, indicando a secretaria, para o pedido que chega fora do
+ * portal — mas nunca no lugar de autorizar sozinho: sao dois atos separados.
+ */
+export function podeAbrirPedido(papel: Papel) {
+  return papel === "secretario" || papel === "compras";
+}
+
+/** Autorizar, recusar e estornar sao do Setor de Compras: e a autorizacao que baixa o saldo. */
+export function podeDecidirPedido(papel: Papel) {
+  return papel === "compras";
+}
+
+export function podeVerPedidos(papel: Papel) {
   return papel !== "superadmin";
 }
 

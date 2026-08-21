@@ -210,19 +210,50 @@ async function recalcularValor(executar: Executar, contratoId: number) {
   );
 }
 
+/** O que impede um item de sair da lista ou de encolher: o que ja foi autorizado. */
+export type ItemComMovimentacao = { item: number; autorizada: number; nova: number };
+
 /**
  * Grava a lista inteira de itens de uma vez, reconciliando por numero do item —
  * o mesmo contrato do lote, para nao depender de ids temporarios criados na tela.
+ *
+ * A partir da Fase 4 o item pode ja ter fornecimento autorizado. Nesse caso ele
+ * nao some nem encolhe abaixo do que foi consumido: o saldo e a diferenca entre
+ * os dois numeros, e deixar um deles cair criaria saldo negativo — quer dizer,
+ * uma entrega que o portal nao explica.
  */
 export async function salvarItensContrato(prefeituraId: number, numero: string, itens: ItemContrato[]) {
   return emTransacao(async (executar) => {
     // O filtro por prefeitura no proprio UPDATE e o que impede uma prefeitura
-    // de gravar no contrato de outra, mesmo adivinhando o numero.
+    // de gravar no contrato de outra, mesmo adivinhando o numero. Ele tambem
+    // trava a linha do contrato, entao uma autorizacao de pedido em curso
+    // espera aqui em vez de disputar o mesmo saldo.
     const [contrato] = (await executar(
       "update contratos set atualizado_em = now() where prefeitura_id = $1 and numero = $2 returning id",
       [prefeituraId, numero],
     )) as Array<{ id: number }>;
-    if (!contrato) return false;
+    if (!contrato) return { erro: "nao-encontrado" as const };
+
+    const consumo = (await executar(
+      `select ic.numero_item,
+              coalesce(sum(ip.quantidade) filter (where p.status = 'autorizado'), 0) as autorizada
+       from itens_contrato ic
+       left join itens_pedido ip on ip.item_contrato_id = ic.id
+       left join pedidos_fornecimento p on p.id = ip.pedido_id
+       where ic.contrato_id = $1
+       group by ic.id`,
+      [contrato.id],
+    )) as Array<{ numero_item: number; autorizada: string }>;
+
+    const autorizadoPorItem = new Map(consumo.map((linha) => [linha.numero_item, Number(linha.autorizada)]));
+    const enviados = new Map(itens.map((item) => [Number(item.item), Number(item.quantidadeContratada || 0)]));
+    const presos: ItemComMovimentacao[] = [];
+    for (const [numeroItem, autorizada] of autorizadoPorItem) {
+      if (!autorizada) continue;
+      const nova = enviados.has(numeroItem) ? enviados.get(numeroItem)! : 0;
+      if (nova + 1e-9 < autorizada) presos.push({ item: numeroItem, autorizada, nova });
+    }
+    if (presos.length) return { erro: "abaixo-do-autorizado" as const, itens: presos };
 
     await executar("delete from itens_contrato where contrato_id = $1 and not (numero_item = any($2::int[]))", [
       contrato.id,
@@ -242,16 +273,32 @@ export async function salvarItensContrato(prefeituraId: number, numero: string, 
     }
 
     await recalcularValor(executar, contrato.id);
-    return true;
+    return { ok: true as const };
   });
 }
 
+/**
+ * Contrato com pedido de fornecimento nao e apagado: o que foi autorizado e
+ * historico de execucao. A API recusa e diz quantos pedidos prendem o contrato,
+ * como ja acontece com a secretaria que nao pode ser excluida.
+ */
 export async function removerContrato(prefeituraId: number, numero: string) {
-  const linha = await consultarUm<{ id: number }>(
-    "delete from contratos where prefeitura_id = $1 and numero = $2 returning id",
-    [prefeituraId, numero],
-  );
-  return Boolean(linha);
+  return emTransacao(async (executar) => {
+    const [contrato] = (await executar(
+      "select id from contratos where prefeitura_id = $1 and numero = $2 for update",
+      [prefeituraId, numero],
+    )) as Array<{ id: number }>;
+    if (!contrato) return { erro: "nao-encontrado" as const };
+
+    const [{ total }] = (await executar(
+      "select count(*) as total from pedidos_fornecimento where contrato_id = $1",
+      [contrato.id],
+    )) as Array<{ total: string }>;
+    if (Number(total) > 0) return { erro: "com-pedidos" as const, pedidos: Number(total) };
+
+    await executar("delete from contratos where id = $1", [contrato.id]);
+    return { ok: true as const };
+  });
 }
 
 /**

@@ -3,7 +3,7 @@
 import { papelLabels, type Papel } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
 import { SinoNotificacoes } from "@/components/compras/SinoNotificacoes";
-import { Building2, ChevronDown, ClipboardList, Database, FileSignature, LayoutDashboard, LogOut, Settings2, ShoppingCart, Stamp, Users } from "lucide-react";
+import { Building2, ChevronDown, ClipboardList, Database, FileSignature, LayoutDashboard, LogOut, PackageCheck, Settings2, ShoppingCart, Stamp, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -31,6 +31,7 @@ function linksDoPapel(papel: Papel): NavLink[] {
       { href: "/painel/configuracoes", label: "Configuracao da prefeitura", icon: Settings2 },
       { href: "/painel/compras", label: "Central de compras", icon: LayoutDashboard, exact: true },
       { href: "/painel/compras/contratos", label: "Contratos", icon: FileSignature, match: ["/painel/compras/contrato"] },
+      { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck },
     ];
   }
   if (papel === "cpl") {
@@ -38,6 +39,7 @@ function linksDoPapel(papel: Papel): NavLink[] {
       { href: "/painel/cpl", label: "Mesa da CPL", icon: Stamp, exact: true },
       { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
       { href: "/painel/compras/contratos", label: "Contratos", icon: FileSignature, match: ["/painel/compras/contrato"] },
+      { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck },
     ];
   }
   if (papel === "secretario") {
@@ -45,6 +47,7 @@ function linksDoPapel(papel: Papel): NavLink[] {
       { href: "/painel/secretario/solicitacoes", label: "Minhas solicitacoes", icon: ClipboardList },
       { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
       { href: "/painel/compras/contratos", label: "Contratos", icon: FileSignature, match: ["/painel/compras/contrato"] },
+      { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck },
     ];
   }
   if (papel === "gestor") {
@@ -52,6 +55,7 @@ function linksDoPapel(papel: Papel): NavLink[] {
       { href: "/painel/compras", label: "Acompanhamento", icon: LayoutDashboard, exact: true },
       { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
       { href: "/painel/compras/contratos", label: "Contratos", icon: FileSignature, match: ["/painel/compras/contrato"] },
+      { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck },
       { href: "/painel/cpl", label: "Mesa da CPL", icon: Stamp, exact: true },
     ];
   }
@@ -60,6 +64,7 @@ function linksDoPapel(papel: Papel): NavLink[] {
     { href: "/painel/secretario/solicitacoes", label: "Solicitacoes", icon: ClipboardList },
     { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
     { href: "/painel/compras/contratos", label: "Contratos", icon: FileSignature, match: ["/painel/compras/contrato"] },
+    { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck },
     { href: "/painel/configuracoes", label: "Configuracao da prefeitura", icon: Settings2 },
   ];
 }

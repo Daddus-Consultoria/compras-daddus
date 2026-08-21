@@ -122,7 +122,14 @@ demonstracao, nao para uso real: os dados somem a cada reinicio.
 | `item_quantidades` | Quantidade por item e por secretaria, uma linha cada |
 | `cotacoes` | Cotacoes do item, com `fonte` (BNC, PNCP, Mercado) e valor |
 | `solicitacoes` | Pedidos abertos pelas secretarias |
-| `tarefas_processo` | Tarefas internas ligadas a um processo |
+| `tarefas_processo` | Agenda pessoal de cada usuario, com vinculo opcional a um processo |
+| `ajustes_quantidade` | Cada correcao de quantidade feita pelo Setor de Compras, com motivo |
+| `historico_status` | Toda mudanca de fase do processo, com quem moveu e quando |
+| `tramites_cpl` | Recebimento, diligencia e retorno registrados pela comissao |
+| `contratos` | Contrato devolvido pela CPL, com vigencia e valor somado dos itens |
+| `itens_contrato` | Itens efetivamente contratados, com quantidade e preco unitario |
+| `pedidos_fornecimento` | Pedidos das secretarias dentro do contrato, com a decisao do Setor de Compras |
+| `itens_pedido` | Quantidade pedida de cada item do contrato |
 
 A logo e servida por `GET /api/config-prefeitura/logo`, com um sufixo de versao
 na URL para invalidar o cache do navegador quando ela e trocada.
@@ -137,8 +144,18 @@ Todas rodam no servidor; o navegador nunca recebe a `DATABASE_URL`.
 | `/api/config-prefeitura` | GET, PUT | Dados institucionais do municipio; o PUT aceita `multipart` com a logo |
 | `/api/config-prefeitura/logo` | GET | Devolve os bytes da logo guardada |
 | `/api/solicitacoes` | GET, POST | Pedidos abertos pelas secretarias |
-| `/api/processos` | GET | Processos com seus itens, quantidades e cotacoes |
+| `/api/processos` | GET, POST | Processos com seus itens, quantidades e cotacoes; POST abre processo |
 | `/api/processos/[numero]/lote` | PUT | Grava o lote inteiro numa transacao |
+| `/api/processos/[numero]/status` | PATCH | Move o processo de fase e grava o historico |
+| `/api/processos/[numero]/cotacoes` | POST, PATCH, DELETE | Cotacoes de um item do lote |
+| `/api/processos/[numero]/cpl` | GET, POST | Tramitacao da comissao; o tramite e que move a fase |
+| `/api/contratos` | GET, POST | Contratos da prefeitura; POST cadastra o que voltou da CPL |
+| `/api/contratos/[numero]` | GET, PATCH, DELETE | Ficha do contrato e a lista de itens contratados |
+| `/api/contratos/[numero]/saldo` | GET | Saldo por item: contratado, autorizado, em analise e o que sobra |
+| `/api/pedidos` | GET, POST | Pedidos de fornecimento; o secretario so enxerga os da propria secretaria |
+| `/api/pedidos/[id]` | GET, PATCH | Autorizar, recusar, cancelar ou estornar um pedido |
+| `/api/agenda` | GET, POST, PATCH, DELETE | Agenda pessoal e a nota de acompanhamento |
+| `/api/notificacoes` | GET, POST | Avisos derivados do estado atual e o que ja foi lido |
 
 O `PUT` do lote recebe o estado desejado completo (`{ notas, itens }`) e
 reconcilia por `numero_item`: itens ausentes sao removidos, os demais sao
@@ -154,9 +171,10 @@ Toda pessoa entra com o proprio e-mail e enxerga apenas o fluxo do seu perfil.
 | --- | --- | --- |
 | `superadmin` | Todas as prefeituras | Cria prefeituras e usuarios de qualquer municipio |
 | `admin` | Uma prefeitura | Cria e desativa usuarios da propria prefeitura; edita os dados institucionais |
-| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; exporta o PDF; consulta os dados institucionais |
-| `secretario` | Uma secretaria | Abre solicitacoes e preenche a quantidade apenas da propria secretaria |
-| `gestor` | Uma prefeitura | Acompanha processos e solicitacoes em somente leitura |
+| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; cadastra contratos; autoriza pedidos de fornecimento; exporta o PDF |
+| `cpl` | Uma prefeitura | Recebe o mapa de precos, registra a tramitacao da comissao e devolve o processo com o contrato |
+| `secretario` | Uma secretaria | Abre solicitacoes, preenche a quantidade da propria secretaria e pede fornecimento nos contratos |
+| `gestor` | Uma prefeitura | Acompanha processos, contratos e saldos em somente leitura |
 
 ### Isolamento
 
@@ -254,12 +272,20 @@ compras mexam na mesma coisa ao mesmo tempo.
 | Em elaboracao | Compras monta os itens, especificacao e unidade |
 | Coleta de quantidades | Cada secretaria lanca a propria quantidade; compras ajusta com justificativa |
 | Em cotacao | Compras lanca as cotacoes e pode ajustar quantidade com justificativa |
-| Enviado para licitacao | Somente leitura |
+| Cotacao concluida | Precos levantados e metodo definido; falta gerar o mapa |
+| Mapa elaborado | Mapa pronto, aguardando o envio a comissao |
+| Mapa enviado a CPL | Somente leitura ate a comissao registrar o recebimento |
+| Em processamento na CPL | A CPL conduz a licitacao e registra a tramitacao |
+| Contrato recebido | A CPL devolveu o contrato; falta o Setor de Compras cadastra-lo |
+| Contrato ativo | Contrato cadastrado e em vigencia, gerando saldo para as secretarias |
+| Encerrado | Contrato executado ou vencido; nao ha mais saldo a consumir |
 | Cancelado | Somente leitura |
 
-Somente o Setor de Compras move o processo, e apenas para as fases vizinhas
-(`transicoesDeStatus`). Toda mudanca fica registrada em `historico_status`, com
-quem moveu, quando e a observacao.
+O Setor de Compras move o processo, e apenas para as fases vizinhas
+(`transicoesDeStatus`). As duas fases da comissao sao excecao: quem as move e a
+propria CPL, e nao por um seletor de fase — ver "CPL e contrato" abaixo. Toda
+mudanca fica registrada em `historico_status`, com quem moveu, quando e a
+observacao.
 
 ## Mapa de precos em PDF
 
@@ -291,3 +317,89 @@ PDF, num bloco proprio.
 Em **Em elaboracao** nao ha essa exigencia: o lote ainda e rascunho do proprio
 Setor de Compras e o numero nao tem dono. A secretaria, por sua vez, nunca
 alcanca coluna alheia — nem enviando justificativa.
+
+## CPL e contrato
+
+A comissao de licitacao existe dentro do portal, com mesa propria em
+`/painel/cpl`: a fila do que ja saiu do Setor de Compras e ainda nao virou
+contrato cadastrado.
+
+A CPL nao escolhe fase numa lista. Ela registra o que aconteceu, e o fato move o
+processo:
+
+| Tramite | O que e | Para onde leva o processo |
+| --- | --- | --- |
+| Recebimento | A comissao confirma que recebeu o mapa e assume o processo | Em processamento na CPL |
+| Diligencia | Pedido de esclarecimento ou correcao, sem devolver | Fica onde esta |
+| Retorno | A comissao devolve o processo, com o contrato ou sem ele | Contrato recebido |
+
+Diligencia e retorno exigem observacao: sem o motivo escrito, o historico nao
+explica por que o processo voltou.
+
+O contrato devolvido vira cadastro proprio. Escolhido o processo de origem, os
+itens do lote entram preenchidos com a quantidade consolidada e o preco de
+referencia do metodo adotado — corrigir tres numeros e mais rapido que digitar
+trinta. Cadastrar o contrato de um processo em "Contrato recebido" leva ele para
+"Contrato ativo", na mesma transacao: e o cadastro que atesta o fato.
+
+O valor do contrato nunca e digitado. Ele e a soma dos itens, recalculada no
+banco a cada gravacao.
+
+## Execucao do contrato
+
+Contrato ativo gera saldo, e saldo se consome com pedido de fornecimento. A
+secretaria pede; o Setor de Compras autoriza. E a autorizacao que baixa o saldo,
+do mesmo jeito que na prefeitura e o empenho que compromete a dotacao.
+
+| Situacao do pedido | O que significa | Mexe no saldo? |
+| --- | --- | --- |
+| Aguardando autorizacao | A secretaria pediu e o Setor de Compras ainda nao decidiu | Nao, mas reserva |
+| Autorizado | Fornecimento liberado, com numero de empenho quando houver | Sim, baixa |
+| Recusado | Negado, com motivo registrado | Nao |
+| Cancelado | Retirado antes da decisao por quem pediu ou por compras | Nao |
+| Estornado | Autorizacao desfeita, com motivo; a quantidade volta ao saldo | Sim, devolve |
+
+Recusa e estorno exigem motivo de ao menos 10 caracteres, como o ajuste de
+quantidade — sao os dois atos que deixam a secretaria sem o fornecimento.
+
+### O saldo nao e um campo
+
+Nao existe coluna de saldo nem de quantidade utilizada. Cada leitura apura:
+
+- **contratada** — o que esta em `itens_contrato`;
+- **autorizada** — a soma dos pedidos autorizados;
+- **em analise** — a soma dos pendentes, que ainda nao consumiram nada mas nao
+  estao livres para outra secretaria;
+- **saldo** — contratada menos autorizada;
+- **disponivel** — saldo menos o que esta em analise.
+
+Guardar o saldo faria dele um numero editavel, e um numero editavel diverge dos
+pedidos que o formaram. Corrigir saldo, aqui, e estornar o pedido que o consumiu.
+
+### O que o sistema recusa
+
+- pedido acima do **disponivel**, na abertura, com a lista do que faltou
+  (`item 1: pedido 60 PCT, disponivel 40`);
+- autorizacao acima do **saldo**, conferida de novo na hora de decidir e com o
+  contrato travado — entre abrir o pedido e autorizar, o contrato pode ter
+  mudado de itens;
+- pedido em contrato que nao esteja ativo;
+- secretario mexendo em pedido de outra secretaria, que para ele responde 404;
+- **reduzir um item do contrato** abaixo do que ja foi autorizado, ou tira-lo da
+  lista: a API diz quanto ja foi consumido e manda estornar antes;
+- **excluir contrato** que tenha pedido registrado.
+
+Duas autorizacoes do mesmo contrato nunca correm juntas: a linha do contrato e
+travada antes de olhar o saldo, entao a segunda espera a primeira e recebe a
+recusa com o saldo ja atualizado.
+
+### Avisos
+
+O sino reune o que exige acao e some sozinho quando o motivo acaba:
+
+- Setor de Compras: pedidos aguardando autorizacao;
+- secretaria: seus pedidos autorizados ou recusados na ultima semana;
+- quem acompanha: contrato ativo com vigencia vencendo em ate 30 dias.
+
+Na lista de contratos, quem passou de 90% do valor executado aparece destacado:
+e a hora de decidir entre aditivo e novo processo, antes de faltar saldo.

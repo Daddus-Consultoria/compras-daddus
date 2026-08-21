@@ -1,5 +1,8 @@
 import type { Papel } from "@/lib/auth/papeis";
-import { cotacoesValidas, minimoDeCotacoes, processoStatusLabels, quantidadeDe, type Processo, type Secretaria } from "@/lib/compras";
+import { cotacoesValidas, minimoDeCotacoes, money, processoStatusLabels, quantidadeDe, type Processo, type Secretaria } from "@/lib/compras";
+import type { Contrato } from "@/lib/contratos";
+import { diasParaVencer } from "@/lib/contratos";
+import { valorDoPedido, type Pedido } from "@/lib/pedidos";
 import type { Solicitacao } from "@/lib/repositorio/solicitacoes";
 import type { Tarefa } from "@/lib/repositorio/tarefas";
 
@@ -60,6 +63,8 @@ export function montarNotificacoes(dados: {
   processos: Processo[];
   solicitacoes: Solicitacao[];
   tarefas: Tarefa[];
+  pedidos: Pedido[];
+  contratos: Contrato[];
   lidas: Set<string>;
   hoje?: Date;
 }): Notificacao[] {
@@ -122,6 +127,58 @@ export function montarNotificacoes(dados: {
         href: `/painel/compras/processo/${processo.id}`,
         tom: "aviso",
         quando: processo.prazoLimite,
+      });
+    }
+  }
+
+  // Pedido pendente e saldo que ainda nao caiu: enquanto ninguem decide, a
+  // secretaria espera e o contrato parece ter mais saldo do que tem.
+  if (ehCompras) {
+    for (const pedido of dados.pedidos.filter((item) => item.status === "pendente")) {
+      avisos.push({
+        chave: `pedido:${pedido.id}`,
+        titulo: `Pedido ${pedido.numero} aguardando autorizacao`,
+        detalhe: `${pedido.secretariaNome} · contrato ${pedido.contrato} · ${money(valorDoPedido(pedido))}`,
+        href: "/painel/compras/pedidos",
+        tom: "aviso",
+        quando: pedido.criadoEm,
+      });
+    }
+  }
+
+  // Do outro lado, quem pediu precisa saber que foi decidido. O aviso vale por
+  // uma semana: depois disso a decisao ja e historico, e nao novidade.
+  if (dados.papel === "secretario") {
+    for (const pedido of dados.pedidos) {
+      if (pedido.status !== "autorizado" && pedido.status !== "recusado") continue;
+      const dias = diasAte((pedido.decididoEm ?? "").slice(0, 10), hoje);
+      if (dias === null || dias < -7) continue;
+      avisos.push({
+        chave: `pedido-decidido:${pedido.id}:${pedido.status}`,
+        titulo: `Pedido ${pedido.numero} ${pedido.status === "autorizado" ? "autorizado" : "recusado"}`,
+        detalhe: pedido.status === "autorizado"
+          ? `Contrato ${pedido.contrato}${pedido.empenho ? ` · empenho ${pedido.empenho}` : ""}.`
+          : pedido.motivoDecisao,
+        href: "/painel/compras/pedidos",
+        tom: pedido.status === "recusado" ? "alerta" : "info",
+        quando: pedido.decididoEm ?? "",
+      });
+    }
+  }
+
+  // Contrato a vencer com saldo aberto obriga a decidir cedo: prorrogar, aditar
+  // ou abrir processo novo. Trinta dias e o prazo que a prefeitura consegue usar.
+  if (acompanhaTudo) {
+    for (const contrato of dados.contratos.filter((item) => item.status === "ativo")) {
+      const dias = diasParaVencer(contrato.vigenciaFim, hoje);
+      if (dias === null || dias > 30) continue;
+      avisos.push({
+        chave: `contrato:${contrato.numero}`,
+        titulo: `Contrato ${contrato.numero} ${dias < 0 ? `vencido ha ${Math.abs(dias)} dias` : textoDePrazo(dias)}`,
+        detalhe: `${contrato.fornecedor} · ${contrato.objeto || "sem objeto informado"}`,
+        href: `/painel/compras/contrato/${encodeURIComponent(contrato.numero)}`,
+        tom: dias <= 7 ? "alerta" : "aviso",
+        quando: contrato.vigenciaFim ?? "",
       });
     }
   }
