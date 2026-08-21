@@ -3,7 +3,8 @@
 import { AgendaPessoal } from "@/components/compras/AgendaPessoal";
 import { AppShell } from "@/components/compras/AppShell";
 import { ListaProcessos } from "@/components/compras/ListaProcessos";
-import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
+import { NovoProcesso } from "@/components/compras/NovoProcesso";
+import { podeAbrirSolicitacao, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
 import { loteTotal, money, type Processo, type SecretariaInfo } from "@/lib/compras";
 import { ArrowUpRight, BellRing, CheckCircle2, ClipboardList, FileText, Plus, Timer } from "lucide-react";
@@ -19,6 +20,7 @@ function parseDataBr(valor: string) {
 
 export function CentralCompras({ processos, sessao, secretarias }: { processos: Processo[]; sessao: Sessao; secretarias: SecretariaInfo[] }) {
   const [solicitacoes, setSolicitacoes] = useState<unknown[]>([]);
+  const [abrindoProcesso, setAbrindoProcesso] = useState(false);
 
   useEffect(() => {
     fetch("/api/solicitacoes", { cache: "no-store" })
@@ -39,9 +41,16 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
           <h2>Central do Setor de Compras</h2>
           <p>Monitore solicitacoes, processos e prazos da prefeitura.</p>
         </div>
-        {podeAbrirSolicitacao(sessao.papel) && (
-          <Link href="/painel/secretario/solicitacoes" className="daddus-primary-button"><Plus size={16} /> Nova solicitacao</Link>
-        )}
+        <div className="daddus-heading-actions">
+          {podeAbrirSolicitacao(sessao.papel) && (
+            <Link href="/painel/secretario/solicitacoes" className="daddus-secondary-button"><Plus size={16} /> Nova solicitacao</Link>
+          )}
+          {podeEditarTodasAsColunas(sessao.papel) && (
+            <button type="button" className="daddus-primary-button" onClick={() => setAbrindoProcesso(true)}>
+              <Plus size={16} /> Abrir processo
+            </button>
+          )}
+        </div>
       </div>
 
       {solicitacoes.length > 0 && (
@@ -76,6 +85,8 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
         <AgendaPessoal processos={processos} />
 
       </div>
+
+      {abrindoProcesso && <NovoProcesso secretarias={secretarias} aoFechar={() => setAbrindoProcesso(false)} />}
     </AppShell>
   );
 }

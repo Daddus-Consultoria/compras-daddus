@@ -327,3 +327,64 @@ export async function historicoDoProcesso(prefeituraId: number, numero: string) 
     [prefeituraId, numero],
   );
 }
+
+/**
+ * Sugere o proximo numero no padrao "AAAA-NNNN", continuando a sequencia do ano
+ * corrente daquela prefeitura. E so uma sugestao: quem monta o processo pode
+ * digitar o numero que o municipio usa.
+ */
+export async function proximoNumeroProcesso(prefeituraId: number, ano: number) {
+  const linha = await consultarUm<{ maior: number | null }>(
+    `select max(substring(numero_processo from '\\d+$')::int) as maior
+     from processos_compra
+     where prefeitura_id = $1 and numero_processo like $2`,
+    [prefeituraId, `${ano}-%`],
+  );
+  return `${ano}-${String((linha?.maior ?? 0) + 1).padStart(4, "0")}`;
+}
+
+export type DadosNovoProcesso = {
+  numero: string;
+  objeto: string;
+  prazoLimite: string | null;
+  secretaria: Secretaria | null;
+  responsavel: string;
+  /** Solicitacao que originou o processo, marcada como atendida na mesma transacao. */
+  solicitacaoId: number | null;
+};
+
+/**
+ * Cria o processo ja em "Em elaboracao" e registra a abertura no historico. O
+ * lote nasce vazio: os itens entram na propria tela do processo.
+ */
+export async function criarProcesso(prefeituraId: number, usuarioId: number | null, dados: DadosNovoProcesso) {
+  return emTransacao(async (executar) => {
+    const [existente] = (await executar(
+      "select id from processos_compra where prefeitura_id = $1 and numero_processo = $2",
+      [prefeituraId, dados.numero],
+    )) as Array<{ id: number }>;
+    if (existente) return { erro: "numero-duplicado" as const };
+
+    const [criado] = (await executar(
+      `insert into processos_compra (prefeitura_id, numero_processo, objeto, prazo_limite, secretaria_solicitante_id, responsavel)
+       values ($1, $2, $3, $4, (select id from secretarias where prefeitura_id = $1 and chave = $5), $6)
+       returning id`,
+      [prefeituraId, dados.numero, dados.objeto, paraDataIso(dados.prazoLimite), dados.secretaria, dados.responsavel],
+    )) as Array<{ id: number }>;
+
+    await executar(
+      "insert into historico_status (processo_id, de, para, usuario_id, observacao) values ($1, null, 'em_montagem'::processo_status, $2, $3)",
+      [criado.id, usuarioId, "Processo aberto."],
+    );
+
+    // A solicitacao que virou processo deixa de ficar pendente na fila.
+    if (dados.solicitacaoId) {
+      await executar(
+        "update solicitacoes set status = 'em_cotacao'::solicitacao_status where id = $1 and prefeitura_id = $2 and status = 'pendente'",
+        [dados.solicitacaoId, prefeituraId],
+      );
+    }
+
+    return { numero: dados.numero };
+  });
+}
