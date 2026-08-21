@@ -26,7 +26,6 @@ const paraDataIso = (valor) => {
   const [dia, mes, ano] = String(valor).split("/");
   return `${ano}-${mes}-${dia}`;
 };
-const fontes = { bnc: "BNC", pncp: "PNCP", mercado: "Mercado" };
 
 await cliente.query("begin");
 try {
@@ -82,13 +81,15 @@ try {
 
   for (const processo of demoProcessos) {
     const { rows } = await cliente.query(
-      `insert into processos_compra (prefeitura_id, numero_processo, objeto, prazo_limite, status, secretaria_solicitante_id, responsavel)
-       values ($1, $2, $3, $4, $5, $6, $7)
+      `insert into processos_compra (prefeitura_id, numero_processo, objeto, prazo_limite, status,
+                                     secretaria_solicitante_id, responsavel, metodo_preco, justificativa_metodo)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        on conflict (prefeitura_id, numero_processo) do update set objeto = excluded.objeto, prazo_limite = excluded.prazo_limite,
-         status = excluded.status, secretaria_solicitante_id = excluded.secretaria_solicitante_id, responsavel = excluded.responsavel
+         status = excluded.status, secretaria_solicitante_id = excluded.secretaria_solicitante_id, responsavel = excluded.responsavel,
+         metodo_preco = excluded.metodo_preco, justificativa_metodo = excluded.justificativa_metodo
        returning id`,
       [prefeituraId, processo.id, processo.objeto, paraDataIso(processo.prazoLimite), processo.status,
-       idPorChave[processo.secretariaSolicitante], processo.responsavel],
+       idPorChave[processo.secretariaSolicitante], processo.responsavel, processo.metodoPreco, processo.justificativaMetodo],
     );
     const processoId = rows[0].id;
 
@@ -108,11 +109,14 @@ try {
           [itemId, idPorChave[chave], quantidade],
         );
       }
-      for (const [chave, valor] of Object.entries(item.cotacoes)) {
+      // Recria as cotacoes do item: agora sao registros com fonte, data e documento.
+      await cliente.query("delete from cotacoes where item_id = $1", [itemId]);
+      for (const cotacao of item.cotacoes) {
         await cliente.query(
-          `insert into cotacoes (item_id, fonte, valor_unitario) values ($1, $2, $3)
-           on conflict (item_id, fonte) do update set valor_unitario = excluded.valor_unitario`,
-          [itemId, fontes[chave], valor],
+          `insert into cotacoes (item_id, fonte_tipo, descricao, documento, valor_unitario, data_cotacao, desconsiderada, justificativa)
+           values ($1, $2::fonte_cotacao, $3, $4, $5, $6, $7, $8)`,
+          [itemId, cotacao.fonte, cotacao.descricao, cotacao.documento, cotacao.valorUnitario,
+           cotacao.dataCotacao, cotacao.desconsiderada, cotacao.justificativa],
         );
       }
     }

@@ -1,18 +1,15 @@
 import { podeEditarLote, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import type { LoteItem, Secretaria } from "@/lib/compras";
-import { listarSecretarias } from "@/lib/repositorio/secretarias";
+import { estruturaEditavel, quantidadesEditaveis, statusDescricoes, type LoteItem, type Secretaria } from "@/lib/compras";
 import { lerProcesso, salvarLote } from "@/lib/repositorio/processos";
+import { listarSecretarias } from "@/lib/repositorio/secretarias";
 import { NextResponse } from "next/server";
-
-const chavesCotacao = ["bnc", "pncp", "mercado"] as const;
 
 function numeroValido(valor: unknown) {
   const numero = Number(valor);
   return Number.isFinite(numero) && numero >= 0;
 }
 
-/** Rejeita o lote inteiro quando qualquer item vier malformado, para nao gravar pela metade. */
 function validar(corpo: unknown, chaves: string[]) {
   if (typeof corpo !== "object" || corpo === null) return "Corpo da requisicao invalido.";
   const { notas, itens } = corpo as { notas?: unknown; itens?: unknown };
@@ -31,29 +28,8 @@ function validar(corpo: unknown, chaves: string[]) {
       // Secretaria criada depois do lote nao aparece nos itens antigos: falta = zero.
       if (!numeroValido(item.quantidades?.[chave] ?? 0)) return `Quantidade invalida em ${chave}, item ${item.item}.`;
     }
-    for (const chave of chavesCotacao) {
-      if (!numeroValido(item.cotacoes?.[chave])) return `Cotacao invalida em ${chave}, item ${item.item}.`;
-    }
   }
   return null;
-}
-
-/**
- * Secretario so pode mexer na quantidade da propria secretaria. Em vez de
- * confiar no que a tela enviou, o lote e remontado a partir do que esta
- * gravado, trocando apenas aquela coluna.
- */
-function limitarAoEscopoDoSecretario(gravado: LoteItem[], enviado: LoteItem[], secretaria: Secretaria) {
-  const porNumero = new Map(enviado.map((item) => [item.item, item]));
-  if (enviado.length !== gravado.length || gravado.some((item) => !porNumero.has(item.item))) {
-    return { erro: "Somente o Setor de Compras pode incluir ou remover itens do lote." };
-  }
-  return {
-    itens: gravado.map((item) => ({
-      ...item,
-      quantidades: { ...item.quantidades, [secretaria]: porNumero.get(item.item)!.quantidades[secretaria] },
-    })),
-  };
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ numero: string }> }) {
@@ -79,23 +55,62 @@ export async function PUT(request: Request, { params }: { params: Promise<{ nume
   if (problema) return NextResponse.json({ error: problema }, { status: 400 });
 
   try {
-    let dados = corpo as { notas: string; itens: LoteItem[] };
+    const atual = await lerProcesso(sessao.prefeituraId, numero);
+    if (!atual) return NextResponse.json({ error: `Processo ${numero} nao encontrado.` }, { status: 404 });
 
-    if (!podeEditarTodasAsColunas(sessao.papel)) {
-      if (!sessao.secretariaChave) {
-        return NextResponse.json({ error: "Seu usuario nao esta vinculado a uma secretaria." }, { status: 403 });
-      }
-      const atual = await lerProcesso(sessao.prefeituraId, numero);
-      if (!atual) return NextResponse.json({ error: `Processo ${numero} nao encontrado.` }, { status: 404 });
-      const limitado = limitarAoEscopoDoSecretario(atual.itens, dados.itens, sessao.secretariaChave);
-      if (limitado.erro) return NextResponse.json({ error: limitado.erro }, { status: 403 });
-      // As notas do processo tambem pertencem ao Setor de Compras.
-      dados = { notas: atual.notas, itens: limitado.itens! };
+    const enviado = corpo as { notas: string; itens: LoteItem[] };
+    const compras = podeEditarTodasAsColunas(sessao.papel);
+    const podeEstrutura = compras && estruturaEditavel(atual.status);
+    const podeQuantidade = quantidadesEditaveis(atual.status);
+
+    if (!podeQuantidade && !podeEstrutura) {
+      return NextResponse.json(
+        { error: `O lote esta na fase "${statusDescricoes[atual.status]}" e nao aceita alteracao de quantidade.` },
+        { status: 409 },
+      );
+    }
+    if (!compras && !sessao.secretariaChave) {
+      return NextResponse.json({ error: "Seu usuario nao esta vinculado a uma secretaria." }, { status: 403 });
     }
 
-    const gravou = await salvarLote(sessao.prefeituraId, numero, dados, sessao.id || null);
+    // As colunas que a pessoa pode mexer nesta fase; as demais vem do que esta gravado.
+    const colunasLiberadas: Secretaria[] = !podeQuantidade
+      ? []
+      : compras
+        ? secretarias.map((secretaria) => secretaria.chave)
+        : [sessao.secretariaChave as Secretaria];
+
+    const enviadoPorNumero = new Map(enviado.itens.map((item) => [item.item, item]));
+
+    if (!podeEstrutura) {
+      const mesmaEstrutura =
+        enviado.itens.length === atual.itens.length && atual.itens.every((item) => enviadoPorNumero.has(item.item));
+      if (!mesmaEstrutura) {
+        return NextResponse.json(
+          { error: compras
+              ? "Itens so podem ser incluidos ou removidos enquanto o processo esta em elaboracao."
+              : "Somente o Setor de Compras pode incluir ou remover itens do lote." },
+          { status: 409 },
+        );
+      }
+    }
+
+    const base = podeEstrutura ? enviado.itens : atual.itens;
+    const itens = base.map((item) => {
+      const referencia = podeEstrutura ? item : (atual.itens.find((linha) => linha.item === item.item) ?? item);
+      const recebido = enviadoPorNumero.get(item.item);
+      const quantidades = { ...referencia.quantidades };
+      for (const chave of colunasLiberadas) {
+        if (recebido) quantidades[chave] = Number(recebido.quantidades?.[chave] ?? 0);
+      }
+      return { ...referencia, quantidades };
+    });
+
+    // As notas do processo pertencem ao Setor de Compras.
+    const notas = compras ? enviado.notas : atual.notas;
+    const gravou = await salvarLote(sessao.prefeituraId, numero, { notas, itens }, sessao.id || null);
     if (!gravou) return NextResponse.json({ error: `Processo ${numero} nao encontrado.` }, { status: 404 });
-    return NextResponse.json({ ok: true, itens: dados.itens.length });
+    return NextResponse.json({ ok: true, itens: itens.length });
   } catch (erro) {
     return NextResponse.json({ error: (erro as Error).message }, { status: 500 });
   }

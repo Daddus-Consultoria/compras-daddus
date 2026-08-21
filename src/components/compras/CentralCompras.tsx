@@ -62,7 +62,7 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
   }, [busca, processos, secretarias]);
 
   const emCotacao = processos.filter((processo) => processo.status === "em_cotacao").length;
-  const valorEstimado = processos.reduce((total, processo) => total + loteTotal(processo.itens), 0);
+  const valorEstimado = processos.reduce((total, processo) => total + loteTotal(processo.itens, processo.metodoPreco), 0);
   const proximoPrazo = [...processos].sort((a, b) => parseDataBr(a.prazoLimite) - parseDataBr(b.prazoLimite))[0];
 
   const alternarTarefa = (id: string) => {

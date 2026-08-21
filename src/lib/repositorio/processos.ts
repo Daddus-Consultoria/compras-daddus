@@ -1,9 +1,5 @@
-import type { LoteItem, Processo, ProcessoStatus, Secretaria } from "@/lib/compras";
-import { consultar, emTransacao } from "@/lib/db";
-
-/** A coluna `fonte` guarda o rotulo; a interface trabalha com as tres chaves fixas. */
-const fontePorChave: Record<keyof LoteItem["cotacoes"], string> = { bnc: "BNC", pncp: "PNCP", mercado: "Mercado" };
-const chavePorFonte: Record<string, keyof LoteItem["cotacoes"]> = { BNC: "bnc", PNCP: "pncp", Mercado: "mercado" };
+import type { Cotacao, LoteItem, MetodoPreco, Processo, ProcessoStatus, Secretaria } from "@/lib/compras";
+import { consultar, consultarUm, emTransacao } from "@/lib/db";
 
 type LinhaProcesso = {
   id: number;
@@ -14,6 +10,8 @@ type LinhaProcesso = {
   secretaria_solicitante: Secretaria | null;
   responsavel: string;
   notas_processo: string;
+  metodo_preco: MetodoPreco;
+  justificativa_metodo: string;
   atualizado_em: string;
 };
 
@@ -23,7 +21,7 @@ type LinhaItem = {
   especificacao: string;
   unidade: string;
   quantidades: Record<string, number>;
-  cotacoes: Record<string, number>;
+  cotacoes: Cotacao[];
 };
 
 // As datas sao formatadas no proprio Postgres para nao dependerem do fuso do servidor.
@@ -31,6 +29,7 @@ const selecaoProcesso = `
   select p.id, p.numero_processo, p.objeto,
          to_char(p.prazo_limite, 'DD/MM/YYYY') as prazo_limite,
          p.status, sec.chave as secretaria_solicitante, p.responsavel, p.notas_processo,
+         p.metodo_preco, p.justificativa_metodo,
          to_char(p.atualizado_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as atualizado_em
   from processos_compra p
   left join secretarias sec on sec.id = p.secretaria_solicitante_id`;
@@ -40,8 +39,17 @@ const selecaoItens = `
          coalesce((select jsonb_object_agg(s.chave, q.quantidade)
                    from item_quantidades q join secretarias s on s.id = q.secretaria_id
                    where q.item_id = i.id), '{}'::jsonb) as quantidades,
-         coalesce((select jsonb_object_agg(c.fonte, c.valor_unitario)
-                   from cotacoes c where c.item_id = i.id), '{}'::jsonb) as cotacoes
+         coalesce((select jsonb_agg(jsonb_build_object(
+                     'id', c.id,
+                     'fonte', c.fonte_tipo,
+                     'descricao', c.descricao,
+                     'documento', c.documento,
+                     'valorUnitario', c.valor_unitario,
+                     'dataCotacao', to_char(c.data_cotacao, 'DD/MM/YYYY'),
+                     'desconsiderada', c.desconsiderada,
+                     'justificativa', c.justificativa)
+                     order by c.desconsiderada, c.valor_unitario)
+                   from cotacoes c where c.item_id = i.id), '[]'::jsonb) as cotacoes
   from itens_lote i
   where i.processo_id = any($1::int[])
   order by i.numero_item`;
@@ -52,11 +60,10 @@ function paraItem(linha: LinhaItem, chaves: string[]): LoteItem {
     ...Object.fromEntries(chaves.map((chave) => [chave, 0])),
     ...Object.fromEntries(gravadas),
   } as Record<Secretaria, number>;
-  const cotacoes = { bnc: 0, pncp: 0, mercado: 0 };
-  for (const [fonte, valor] of Object.entries(linha.cotacoes ?? {})) {
-    const chave = chavePorFonte[fonte];
-    if (chave) cotacoes[chave] = Number(valor);
-  }
+  const cotacoes = (linha.cotacoes ?? []).map((cotacao) => ({
+    ...cotacao,
+    valorUnitario: Number(cotacao.valorUnitario),
+  }));
   return {
     id: `${linha.processo_id}-${linha.numero_item}`,
     item: linha.numero_item,
@@ -73,6 +80,8 @@ function paraProcesso(linha: LinhaProcesso, itens: LoteItem[]): Processo {
     objeto: linha.objeto,
     prazoLimite: linha.prazo_limite ?? "-",
     status: linha.status,
+    metodoPreco: linha.metodo_preco,
+    justificativaMetodo: linha.justificativa_metodo,
     secretariaSolicitante: linha.secretaria_solicitante,
     responsavel: linha.responsavel,
     atualizadoEm: linha.atualizado_em,
@@ -159,14 +168,133 @@ export async function salvarLote(
         );
       }
 
-      for (const [chave, fonte] of Object.entries(fontePorChave)) {
-        await executar(
-          `insert into cotacoes (item_id, fonte, valor_unitario) values ($1, $2, $3)
-           on conflict (item_id, fonte) do update set valor_unitario = excluded.valor_unitario`,
-          [linha.id, fonte, item.cotacoes[chave as keyof LoteItem["cotacoes"]] ?? 0],
-        );
-      }
     }
     return true;
   });
+}
+
+type DadosCotacao = {
+  fonte: string;
+  descricao: string;
+  documento: string;
+  valorUnitario: number;
+  dataCotacao: string | null;
+  desconsiderada: boolean;
+  justificativa: string;
+};
+
+/** "12/08/2026" -> "2026-08-12"; qualquer outra coisa vira nulo. */
+function paraDataIso(valor: string | null) {
+  if (!valor) return null;
+  const partes = valor.split("/");
+  if (partes.length !== 3) return null;
+  const [dia, mes, ano] = partes;
+  return `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
+}
+
+/**
+ * Confere que o item pertence mesmo a um processo daquela prefeitura antes de
+ * qualquer escrita: e o que impede uma prefeitura de lancar cotacao na outra.
+ */
+async function idDoItem(prefeituraId: number, numero: string, numeroItem: number) {
+  const linha = await consultarUm<{ id: number }>(
+    `select i.id from itens_lote i
+     join processos_compra p on p.id = i.processo_id
+     where p.prefeitura_id = $1 and p.numero_processo = $2 and i.numero_item = $3`,
+    [prefeituraId, numero, numeroItem],
+  );
+  return linha?.id ?? null;
+}
+
+export async function criarCotacao(prefeituraId: number, numero: string, numeroItem: number, dados: DadosCotacao) {
+  const itemId = await idDoItem(prefeituraId, numero, numeroItem);
+  if (!itemId) return null;
+  const linha = await consultarUm<{ id: number }>(
+    `insert into cotacoes (item_id, fonte_tipo, descricao, documento, valor_unitario, data_cotacao, desconsiderada, justificativa)
+     values ($1, $2::fonte_cotacao, $3, $4, $5, $6, $7, $8) returning id`,
+    [itemId, dados.fonte, dados.descricao, dados.documento, dados.valorUnitario, paraDataIso(dados.dataCotacao), dados.desconsiderada, dados.justificativa],
+  );
+  await consultar("update processos_compra set atualizado_em = now() where numero_processo = $1 and prefeitura_id = $2", [numero, prefeituraId]);
+  return linha?.id ?? null;
+}
+
+export async function atualizarCotacao(prefeituraId: number, cotacaoId: number, dados: Partial<DadosCotacao>) {
+  const linha = await consultarUm<{ id: number }>(
+    `update cotacoes c set
+       fonte_tipo = coalesce($3::fonte_cotacao, c.fonte_tipo),
+       descricao = coalesce($4, c.descricao),
+       documento = coalesce($5, c.documento),
+       valor_unitario = coalesce($6, c.valor_unitario),
+       data_cotacao = coalesce($7::date, c.data_cotacao),
+       desconsiderada = coalesce($8, c.desconsiderada),
+       justificativa = coalesce($9, c.justificativa)
+     from itens_lote i join processos_compra p on p.id = i.processo_id
+     where c.id = $2 and c.item_id = i.id and p.prefeitura_id = $1
+     returning c.id`,
+    [
+      prefeituraId, cotacaoId,
+      dados.fonte ?? null, dados.descricao ?? null, dados.documento ?? null,
+      dados.valorUnitario ?? null, dados.dataCotacao ? paraDataIso(dados.dataCotacao) : null,
+      dados.desconsiderada ?? null, dados.justificativa ?? null,
+    ],
+  );
+  return Boolean(linha);
+}
+
+export async function removerCotacao(prefeituraId: number, cotacaoId: number) {
+  const linha = await consultarUm<{ id: number }>(
+    `delete from cotacoes c
+     using itens_lote i, processos_compra p
+     where c.id = $2 and c.item_id = i.id and i.processo_id = p.id and p.prefeitura_id = $1
+     returning c.id`,
+    [prefeituraId, cotacaoId],
+  );
+  return Boolean(linha);
+}
+
+export async function definirMetodo(prefeituraId: number, numero: string, metodo: MetodoPreco, justificativa: string) {
+  const linha = await consultarUm<{ id: number }>(
+    `update processos_compra set metodo_preco = $3::metodo_preco, justificativa_metodo = $4, atualizado_em = now()
+     where prefeitura_id = $1 and numero_processo = $2 returning id`,
+    [prefeituraId, numero, metodo, justificativa],
+  );
+  return Boolean(linha);
+}
+
+/** Muda a fase do processo e deixa registrado quem mudou, para o processo administrativo. */
+export async function alterarStatus(prefeituraId: number, numero: string, novo: ProcessoStatus, usuarioId: number | null, observacao: string) {
+  return emTransacao(async (executar) => {
+    const [atual] = (await executar(
+      "select id, status from processos_compra where prefeitura_id = $1 and numero_processo = $2 for update",
+      [prefeituraId, numero],
+    )) as Array<{ id: number; status: ProcessoStatus }>;
+    if (!atual) return { erro: "processo-nao-encontrado" as const };
+    await executar("update processos_compra set status = $2::processo_status, atualizado_em = now() where id = $1", [atual.id, novo]);
+    await executar(
+      "insert into historico_status (processo_id, de, para, usuario_id, observacao) values ($1, $2::processo_status, $3::processo_status, $4, $5)",
+      [atual.id, atual.status, novo, usuarioId, observacao],
+    );
+    return { anterior: atual.status };
+  });
+}
+
+export type EventoStatus = {
+  de: ProcessoStatus | null;
+  para: ProcessoStatus;
+  usuario: string | null;
+  observacao: string;
+  quando: string;
+};
+
+export async function historicoDoProcesso(prefeituraId: number, numero: string) {
+  return consultar<EventoStatus>(
+    `select h.de, h.para, u.nome as usuario, h.observacao,
+            to_char(h.criado_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as quando
+     from historico_status h
+     join processos_compra p on p.id = h.processo_id
+     left join usuarios u on u.id = h.usuario_id
+     where p.prefeitura_id = $1 and p.numero_processo = $2
+     order by h.criado_em desc`,
+    [prefeituraId, numero],
+  );
 }

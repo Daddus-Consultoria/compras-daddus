@@ -1,77 +1,223 @@
 "use client";
 
-import type { LoteItem, PrefeituraConfig, Processo, SecretariaInfo } from "@/lib/compras";
-import { itemAverage, itemTotalQuantity, loteTotal, money, nomeSecretaria } from "@/lib/compras";
+import {
+  cotacoesValidas,
+  fonteLabels,
+  itemTotalQuantity,
+  loteTotal,
+  metodoLabels,
+  money,
+  nomeSecretaria,
+  precoUnitario,
+  processoStatusLabels,
+  type LoteItem,
+  type PrefeituraConfig,
+  type Processo,
+  type SecretariaInfo,
+} from "@/lib/compras";
 import { FileDown } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useState } from "react";
 
 const margem = 14;
 const larguraUtil = 269;
+const vinho: [number, number, number] = [150, 24, 48];
 
-export function ExportLicitacaoPDF({ items, prefeitura, processo, secretarias, notas }: { items: LoteItem[]; prefeitura: PrefeituraConfig; processo: Processo; secretarias: SecretariaInfo[]; notas: string }) {
-  const exportPdf = () => {
-    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    pdf.setTextColor(20, 20, 20);
-    pdf.setFontSize(10);
-    pdf.text(prefeitura.estado || "UF", margem, 14);
-    pdf.setFontSize(14);
-    pdf.setFont("helvetica", "bold");
-    pdf.text(prefeitura.nome || "PREFEITURA MUNICIPAL", margem, 21);
-    pdf.setFontSize(10);
-    pdf.setFont("helvetica", "normal");
-    pdf.text("SETOR DE COMPRAS / ORCAMENTOS", margem, 28);
-    pdf.text(`CNPJ: ${prefeitura.cnpj || "Nao informado"}`, margem, 34);
-    pdf.setDrawColor(160, 160, 160);
-    pdf.line(margem, 39, 283, 39);
-
-    pdf.setFont("helvetica", "bold");
-    pdf.text("MAPA DE COMPOSICAO E COTACOES", margem, 48);
-    pdf.setFont("helvetica", "normal");
-    pdf.text(`Processo: PE ${processo.id}`, margem, 55);
-    pdf.text(`Objeto: ${processo.objeto}`, margem, 61, { maxWidth: larguraUtil });
-    pdf.text(`Solicitante: ${nomeSecretaria(secretarias, processo.secretariaSolicitante)}`, margem, 67);
-    pdf.text(`Prazo limite: ${processo.prazoLimite}`, 150, 55);
-    pdf.text(`Status: ${processo.status}`, 150, 61);
-
-    autoTable(pdf, {
-      startY: 74,
-      head: [["Item", "Especificacao detalhada", "Un.", ...secretarias.map((secretaria) => secretaria.nome), "Qtd. total", "BNC", "PNCP", "Mercado", "Valor medio", "Valor total"]],
-      body: items.map((item) => [
-        item.item,
-        item.especificacao,
-        item.unidade,
-        ...secretarias.map((secretaria) => Number(item.quantidades[secretaria.chave] ?? 0)),
-        itemTotalQuantity(item),
-        money(item.cotacoes.bnc),
-        money(item.cotacoes.pncp),
-        money(item.cotacoes.mercado),
-        money(itemAverage(item)),
-        money(itemAverage(item) * itemTotalQuantity(item)),
-      ]),
-      foot: [["", "Valor total estimado do lote", ...Array(secretarias.length + 8).fill(""), money(loteTotal(items))]],
-      styles: { fontSize: 7, cellPadding: 2 },
-      headStyles: { fillColor: [150, 24, 48] },
-      footStyles: { fillColor: [240, 240, 242], textColor: [20, 20, 20], fontStyle: "bold" },
-      alternateRowStyles: { fillColor: [248, 248, 248] },
+/**
+ * Busca a logo da prefeitura e devolve algo que o jsPDF aceite. SVG fica de
+ * fora porque o jsPDF nao rasteriza vetor; nesse caso o cabecalho sai sem
+ * brasao, em vez de quebrar a emissao do documento.
+ */
+async function carregarLogo(url: string) {
+  if (!url) return null;
+  try {
+    const resposta = await fetch(url);
+    if (!resposta.ok) return null;
+    const blob = await resposta.blob();
+    if (!["image/png", "image/jpeg"].includes(blob.type)) return null;
+    const dataUrl = await new Promise<string>((resolver, rejeitar) => {
+      const leitor = new FileReader();
+      leitor.onload = () => resolver(String(leitor.result));
+      leitor.onerror = rejeitar;
+      leitor.readAsDataURL(blob);
     });
+    const dimensoes = await new Promise<{ largura: number; altura: number }>((resolver, rejeitar) => {
+      const imagem = new Image();
+      imagem.onload = () => resolver({ largura: imagem.naturalWidth, altura: imagem.naturalHeight });
+      imagem.onerror = rejeitar;
+      imagem.src = dataUrl;
+    });
+    return { dataUrl, formato: blob.type === "image/png" ? "PNG" : "JPEG", ...dimensoes };
+  } catch {
+    return null;
+  }
+}
 
-    let cursorY = ((pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 170) + 12;
-    // A folha A4 deitada tem 210 mm: sem espaco para o rodape, abre uma nova pagina.
-    if (cursorY > 160) {
-      pdf.addPage();
-      cursorY = 30;
+export function ExportLicitacaoPDF({
+  items,
+  prefeitura,
+  processo,
+  secretarias,
+  notas,
+}: {
+  items: LoteItem[];
+  prefeitura: PrefeituraConfig;
+  processo: Processo;
+  secretarias: SecretariaInfo[];
+  notas: string;
+}) {
+  const [gerando, setGerando] = useState(false);
+  const metodo = processo.metodoPreco;
+
+  const exportPdf = async () => {
+    setGerando(true);
+    try {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const logo = await carregarLogo(prefeitura.logoUrl);
+
+      // ---------- cabecalho institucional ----------
+      let textoX = margem;
+      if (logo) {
+        const alturaLogo = 16;
+        const larguraLogo = Math.min(40, (logo.largura / logo.altura) * alturaLogo);
+        pdf.addImage(logo.dataUrl, logo.formato, margem, 10, larguraLogo, alturaLogo);
+        textoX = margem + larguraLogo + 6;
+      }
+      pdf.setTextColor(20, 20, 20);
+      pdf.setFontSize(13);
+      pdf.setFont("helvetica", "bold");
+      pdf.text((prefeitura.nome || "PREFEITURA MUNICIPAL").toUpperCase(), textoX, 16);
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Estado: ${prefeitura.estado || "-"}    CNPJ: ${prefeitura.cnpj || "Nao informado"}`, textoX, 21);
+      pdf.text(prefeitura.enderecoCompras || "Setor de Compras", textoX, 26, { maxWidth: larguraUtil - textoX });
+      pdf.setDrawColor(...vinho);
+      pdf.setLineWidth(0.6);
+      pdf.line(margem, 30, 283, 30);
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(12);
+      pdf.text("MAPA DE PESQUISA DE PRECOS", margem, 38);
+      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(90, 90, 90);
+      pdf.text("Lei 14.133/2021, art. 23 · IN SEGES/ME 65/2021", margem, 43);
+      pdf.setTextColor(20, 20, 20);
+
+      pdf.setFontSize(9);
+      pdf.text(`Processo: PE ${processo.id}`, margem, 51);
+      pdf.text(`Objeto: ${processo.objeto}`, margem, 56, { maxWidth: 150 });
+      pdf.text(`Solicitante: ${nomeSecretaria(secretarias, processo.secretariaSolicitante)}`, margem, 61);
+      pdf.text(`Fase: ${processoStatusLabels[processo.status]}`, 175, 51);
+      pdf.text(`Prazo limite: ${processo.prazoLimite}`, 175, 56);
+      pdf.text(`Responsavel: ${processo.responsavel}`, 175, 61);
+
+      // ---------- composicao do lote ----------
+      autoTable(pdf, {
+        startY: 68,
+        head: [[
+          "Item", "Especificacao detalhada", "Un.",
+          ...secretarias.map((secretaria) => secretaria.nome),
+          "Qtd. total", "Cot.", `Preco unit. (${metodoLabels[metodo].toLowerCase()})`, "Valor total",
+        ]],
+        body: items.map((item) => {
+          const unitario = precoUnitario(item, metodo);
+          return [
+            item.item,
+            item.especificacao,
+            item.unidade,
+            ...secretarias.map((secretaria) => Number(item.quantidades[secretaria.chave] ?? 0)),
+            itemTotalQuantity(item),
+            cotacoesValidas(item).length,
+            money(unitario),
+            money(unitario * itemTotalQuantity(item)),
+          ];
+        }),
+        foot: [["", "VALOR TOTAL ESTIMADO DO LOTE", ...Array(secretarias.length + 4).fill(""), money(loteTotal(items, metodo))]],
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: vinho },
+        footStyles: { fillColor: [240, 240, 242], textColor: [20, 20, 20], fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+      });
+
+      // ---------- detalhamento das cotacoes ----------
+      let cursorY = ((pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 150) + 10;
+      const detalhes = items.flatMap((item) =>
+        item.cotacoes.map((cotacao) => [
+          String(item.item),
+          fonteLabels[cotacao.fonte],
+          cotacao.descricao,
+          cotacao.documento || "-",
+          cotacao.dataCotacao || "-",
+          money(cotacao.valorUnitario),
+          cotacao.desconsiderada ? `Desconsiderada: ${cotacao.justificativa}` : "Considerada",
+        ]),
+      );
+
+      if (detalhes.length) {
+        if (cursorY > 150) {
+          pdf.addPage();
+          cursorY = 20;
+        }
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(10);
+        pdf.text("DETALHAMENTO DAS COTACOES", margem, cursorY);
+        autoTable(pdf, {
+          startY: cursorY + 4,
+          head: [["Item", "Fonte", "Origem consultada", "Documento", "Data", "Valor unitario", "Situacao"]],
+          body: detalhes,
+          styles: { fontSize: 7, cellPadding: 2 },
+          headStyles: { fillColor: [90, 90, 96] },
+          alternateRowStyles: { fillColor: [248, 248, 248] },
+          columnStyles: { 6: { cellWidth: 60 } },
+        });
+        cursorY = ((pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || cursorY) + 10;
+      }
+
+      // ---------- metodologia e assinatura ----------
+      if (cursorY > 165) {
+        pdf.addPage();
+        cursorY = 20;
+      }
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10);
+      pdf.text("METODOLOGIA ADOTADA", margem, cursorY);
+      cursorY += 6;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      const metodologia = pdf.splitTextToSize(
+        `Valor de referencia obtido por ${metodoLabels[metodo].toLowerCase()} dos precos considerados, nos termos do art. 6 da IN SEGES/ME 65/2021.` +
+          (processo.justificativaMetodo ? ` Justificativa: ${processo.justificativaMetodo}` : "") +
+          " Precos desconsiderados e os respectivos motivos constam do detalhamento acima.",
+        larguraUtil,
+      ) as string[];
+      pdf.text(metodologia, margem, cursorY);
+      cursorY += metodologia.length * 5 + 5;
+
+      const comentarios = pdf.splitTextToSize(`Observacoes do processo: ${notas || "Nenhuma observacao registrada."}`, larguraUtil) as string[];
+      pdf.text(comentarios, margem, cursorY);
+      cursorY += comentarios.length * 5 + 8;
+
+      pdf.setFontSize(8);
+      pdf.setTextColor(90, 90, 90);
+      pdf.text(`Emitido em ${new Date().toLocaleDateString("pt-BR")} por ${processo.responsavel}.`, margem, cursorY);
+      pdf.setTextColor(20, 20, 20);
+      pdf.setLineWidth(0.2);
+      pdf.setDrawColor(120, 120, 120);
+      pdf.line(200, cursorY + 12, 275, cursorY + 12);
+      pdf.setFontSize(9);
+      pdf.text("Responsavel pelo Setor de Compras", 208, cursorY + 17);
+
+      pdf.save(`mapa-de-precos-${processo.id}.pdf`);
+    } finally {
+      setGerando(false);
     }
-
-    pdf.setFontSize(9);
-    const comentarios = pdf.splitTextToSize(`Comentarios do processo: ${notas || "Nenhum comentario registrado."}`, larguraUtil) as string[];
-    pdf.text(comentarios, margem, cursorY);
-    cursorY += comentarios.length * 5 + 6;
-    pdf.text(`Emitido em ${new Date().toLocaleDateString("pt-BR")}`, margem, cursorY);
-    pdf.line(205, cursorY + 5, 270, cursorY + 5);
-    pdf.text("Responsavel por Compras", 220, cursorY + 11);
-    pdf.save(`mapa-licitacao-${processo.id}.pdf`);
   };
 
-  return <button type="button" className="daddus-secondary-button" onClick={exportPdf}><FileDown size={16} /> Exportar PDF oficial</button>;
+  return (
+    <button type="button" className="daddus-secondary-button" onClick={exportPdf} disabled={gerando}>
+      <FileDown size={16} /> {gerando ? "Gerando..." : "Exportar PDF oficial"}
+    </button>
+  );
 }

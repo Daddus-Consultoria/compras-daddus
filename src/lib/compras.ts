@@ -12,10 +12,64 @@ export type SecretariaInfo = {
   ativa: boolean;
 };
 
-export type Cotacoes = {
-  bnc: number;
-  pncp: number;
-  mercado: number;
+/**
+ * Fontes admitidas na pesquisa de precos, na ordem de preferencia do art. 5 da
+ * IN SEGES/ME 65/2021: bases publicas primeiro, fornecedor por ultimo.
+ */
+export type FonteCotacao =
+  | "painel_precos"
+  | "pncp"
+  | "contrato_similar"
+  | "tabela_referencia"
+  | "sitio_eletronico"
+  | "midia_especializada"
+  | "fornecedor";
+
+export const fonteLabels: Record<FonteCotacao, string> = {
+  painel_precos: "Painel de Precos",
+  pncp: "PNCP",
+  contrato_similar: "Contratacao similar",
+  tabela_referencia: "Tabela de referencia",
+  sitio_eletronico: "Sitio eletronico",
+  midia_especializada: "Midia especializada",
+  fornecedor: "Fornecedor",
+};
+
+export const fonteDescricoes: Record<FonteCotacao, string> = {
+  painel_precos: "Painel de Precos do Governo Federal",
+  pncp: "Portal Nacional de Contratacoes Publicas",
+  contrato_similar: "Contratacao similar de outro ente publico, dos ultimos 12 meses",
+  tabela_referencia: "Tabela oficial de referencia (SINAPI, SICRO, CMED)",
+  sitio_eletronico: "Sitio eletronico especializado ou de dominio amplo",
+  midia_especializada: "Publicacao ou midia especializada do setor",
+  fornecedor: "Pesquisa direta com fornecedor",
+};
+
+export const fontesEmOrdem: FonteCotacao[] = [
+  "painel_precos", "pncp", "contrato_similar", "tabela_referencia",
+  "sitio_eletronico", "midia_especializada", "fornecedor",
+];
+
+export type Cotacao = {
+  id: number;
+  fonte: FonteCotacao;
+  /** Fornecedor, orgao ou nome da fonte consultada. */
+  descricao: string;
+  /** Link, numero do contrato, CNPJ — o que comprova a cotacao. */
+  documento: string;
+  valorUnitario: number;
+  dataCotacao: string | null;
+  desconsiderada: boolean;
+  justificativa: string;
+};
+
+/** Art. 6 da IN 65/2021: media, mediana ou menor dos valores obtidos. */
+export type MetodoPreco = "media" | "mediana" | "menor";
+
+export const metodoLabels: Record<MetodoPreco, string> = {
+  media: "Media das cotacoes",
+  mediana: "Mediana das cotacoes",
+  menor: "Menor preco obtido",
 };
 
 export type LoteItem = {
@@ -24,7 +78,7 @@ export type LoteItem = {
   especificacao: string;
   unidade: string;
   quantidades: Record<string, number>;
-  cotacoes: Cotacoes;
+  cotacoes: Cotacao[];
 };
 
 export type PrefeituraConfig = {
@@ -62,6 +116,8 @@ export type Processo = {
   objeto: string;
   prazoLimite: string;
   status: ProcessoStatus;
+  metodoPreco: MetodoPreco;
+  justificativaMetodo: string;
   secretariaSolicitante: Secretaria | null;
   responsavel: string;
   atualizadoEm: string;
@@ -114,14 +170,40 @@ export const demoProcessos: Processo[] = [
     objeto: "Material de expediente para as secretarias",
     prazoLimite: "28/08/2026",
     status: "em_cotacao",
+    metodoPreco: "media",
+    justificativaMetodo: "",
     secretariaSolicitante: "administracao",
     responsavel: "Marina Alves",
     atualizadoEm: "Hoje, 14:32",
     notas: "",
     itens: [
-      { id: "0142-1", item: 1, especificacao: "Papel sulfite A4, branco, 75 g/m2, pacote com 500 folhas", unidade: "PCT", quantidades: { educacao: 120, saude: 45, assistencia: 25, administracao: 30 }, cotacoes: { bnc: 28.9, pncp: 29.5, mercado: 31.2 } },
-      { id: "0142-2", item: 2, especificacao: "Caneta esferografica azul, corpo cristal, ponta media", unidade: "CX", quantidades: { educacao: 40, saude: 18, assistencia: 12, administracao: 20 }, cotacoes: { bnc: 42.5, pncp: 44, mercado: 45.9 } },
-      { id: "0142-3", item: 3, especificacao: "Pasta arquivo com aba elastica, polipropileno, oficio", unidade: "UN", quantidades: { educacao: 80, saude: 25, assistencia: 15, administracao: 20 }, cotacoes: { bnc: 8.4, pncp: 8.9, mercado: 9.5 } },
+      {
+        id: "0142-1", item: 1, especificacao: "Papel sulfite A4, branco, 75 g/m2, pacote com 500 folhas", unidade: "PCT",
+        quantidades: { educacao: 120, saude: 45, assistencia: 25, administracao: 30 },
+        cotacoes: [
+          { id: 1, fonte: "painel_precos", descricao: "Painel de Precos - compras federais", documento: "Item 15125 / ARP 12-2026", valorUnitario: 28.9, dataCotacao: "2026-08-04", desconsiderada: false, justificativa: "" },
+          { id: 2, fonte: "pncp", descricao: "Prefeitura de Ribeirao Preto", documento: "PNCP 12345.678901/2026-11", valorUnitario: 29.5, dataCotacao: "2026-08-07", desconsiderada: false, justificativa: "" },
+          { id: 3, fonte: "fornecedor", descricao: "Norte Suprimentos LTDA", documento: "CNPJ 11.222.333/0001-44", valorUnitario: 31.2, dataCotacao: "2026-08-12", desconsiderada: false, justificativa: "" },
+        ],
+      },
+      {
+        id: "0142-2", item: 2, especificacao: "Caneta esferografica azul, corpo cristal, ponta media", unidade: "CX",
+        quantidades: { educacao: 40, saude: 18, assistencia: 12, administracao: 20 },
+        cotacoes: [
+          { id: 4, fonte: "painel_precos", descricao: "Painel de Precos - compras federais", documento: "Item 22871", valorUnitario: 42.5, dataCotacao: "2026-08-04", desconsiderada: false, justificativa: "" },
+          { id: 5, fonte: "sitio_eletronico", descricao: "Distribuidora Papelar", documento: "www.papelar.com.br", valorUnitario: 44.0, dataCotacao: "2026-08-09", desconsiderada: false, justificativa: "" },
+          { id: 6, fonte: "fornecedor", descricao: "Norte Suprimentos LTDA", documento: "CNPJ 11.222.333/0001-44", valorUnitario: 45.9, dataCotacao: "2026-08-12", desconsiderada: false, justificativa: "" },
+        ],
+      },
+      {
+        id: "0142-3", item: 3, especificacao: "Pasta arquivo com aba elastica, polipropileno, oficio", unidade: "UN",
+        quantidades: { educacao: 80, saude: 25, assistencia: 15, administracao: 20 },
+        cotacoes: [
+          { id: 7, fonte: "pncp", descricao: "Prefeitura de Franca", documento: "PNCP 98765.432101/2026-02", valorUnitario: 8.4, dataCotacao: "2026-08-06", desconsiderada: false, justificativa: "" },
+          { id: 8, fonte: "sitio_eletronico", descricao: "Distribuidora Papelar", documento: "www.papelar.com.br", valorUnitario: 8.9, dataCotacao: "2026-08-09", desconsiderada: false, justificativa: "" },
+          { id: 9, fonte: "fornecedor", descricao: "Escritorio Total ME", documento: "CNPJ 44.555.666/0001-77", valorUnitario: 9.5, dataCotacao: "2026-08-11", desconsiderada: false, justificativa: "" },
+        ],
+      }
     ],
   },
   {
@@ -129,15 +211,49 @@ export const demoProcessos: Processo[] = [
     objeto: "Medicamentos e insumos hospitalares",
     prazoLimite: "02/09/2026",
     status: "enviado_licitacao",
+    metodoPreco: "mediana",
+    justificativaMetodo: "Cesta com dispersao acima de 25%: a mediana reduz o peso do extremo superior.",
     secretariaSolicitante: "saude",
     responsavel: "Marina Alves",
     atualizadoEm: "Ontem, 09:15",
     notas: "",
     itens: [
-      { id: "0138-1", item: 1, especificacao: "Dipirona sodica 500 mg, comprimido, caixa com 200 unidades", unidade: "CX", quantidades: { educacao: 0, saude: 180, assistencia: 40, administracao: 10 }, cotacoes: { bnc: 34.9, pncp: 36.2, mercado: 38.5 } },
-      { id: "0138-2", item: 2, especificacao: "Luva de procedimento nao cirurgica, latex, tamanho M, caixa com 100", unidade: "CX", quantidades: { educacao: 0, saude: 320, assistencia: 60, administracao: 15 }, cotacoes: { bnc: 27.4, pncp: 28.9, mercado: 30.1 } },
-      { id: "0138-3", item: 3, especificacao: "Seringa descartavel 5 ml com agulha 25 x 7 mm", unidade: "UN", quantidades: { educacao: 0, saude: 1500, assistencia: 200, administracao: 0 }, cotacoes: { bnc: 0.78, pncp: 0.82, mercado: 0.9 } },
-      { id: "0138-4", item: 4, especificacao: "Alcool etilico hidratado 70%, frasco com 1 litro", unidade: "FR", quantidades: { educacao: 25, saude: 240, assistencia: 80, administracao: 20 }, cotacoes: { bnc: 8.2, pncp: 8.7, mercado: 9.4 } },
+      {
+        id: "0138-1", item: 1, especificacao: "Dipirona sodica 500 mg, comprimido, caixa com 200 unidades", unidade: "CX",
+        quantidades: { educacao: 0, saude: 180, assistencia: 40, administracao: 10 },
+        cotacoes: [
+          { id: 10, fonte: "tabela_referencia", descricao: "CMED - preco maximo de venda ao governo", documento: "Lista CMED 08-2026", valorUnitario: 34.9, dataCotacao: "2026-08-01", desconsiderada: false, justificativa: "" },
+          { id: 11, fonte: "pncp", descricao: "Consorcio de Saude regional", documento: "PNCP 55555.111111/2026-08", valorUnitario: 36.2, dataCotacao: "2026-08-05", desconsiderada: false, justificativa: "" },
+          { id: 12, fonte: "fornecedor", descricao: "Farma Distribuidora SA", documento: "CNPJ 22.333.444/0001-55", valorUnitario: 38.5, dataCotacao: "2026-08-10", desconsiderada: false, justificativa: "" },
+        ],
+      },
+      {
+        id: "0138-2", item: 2, especificacao: "Luva de procedimento nao cirurgica, latex, tamanho M, caixa com 100", unidade: "CX",
+        quantidades: { educacao: 0, saude: 320, assistencia: 60, administracao: 15 },
+        cotacoes: [
+          { id: 13, fonte: "painel_precos", descricao: "Painel de Precos - compras federais", documento: "Item 40199", valorUnitario: 27.4, dataCotacao: "2026-08-02", desconsiderada: false, justificativa: "" },
+          { id: 14, fonte: "pncp", descricao: "Prefeitura de Bauru", documento: "PNCP 33333.222222/2026-05", valorUnitario: 28.9, dataCotacao: "2026-08-06", desconsiderada: false, justificativa: "" },
+          { id: 15, fonte: "fornecedor", descricao: "Hospitalar Sul LTDA", documento: "CNPJ 66.777.888/0001-99", valorUnitario: 30.1, dataCotacao: "2026-08-11", desconsiderada: false, justificativa: "" },
+        ],
+      },
+      {
+        id: "0138-3", item: 3, especificacao: "Seringa descartavel 5 ml com agulha 25 x 7 mm", unidade: "UN",
+        quantidades: { educacao: 0, saude: 1500, assistencia: 200, administracao: 0 },
+        cotacoes: [
+          { id: 16, fonte: "painel_precos", descricao: "Painel de Precos - compras federais", documento: "Item 30871", valorUnitario: 0.78, dataCotacao: "2026-08-02", desconsiderada: false, justificativa: "" },
+          { id: 17, fonte: "contrato_similar", descricao: "Ata de registro - Estado de SP", documento: "ARP 044-2026", valorUnitario: 0.82, dataCotacao: "2026-08-05", desconsiderada: false, justificativa: "" },
+          { id: 18, fonte: "fornecedor", descricao: "Hospitalar Sul LTDA", documento: "CNPJ 66.777.888/0001-99", valorUnitario: 0.9, dataCotacao: "2026-08-11", desconsiderada: false, justificativa: "" },
+        ],
+      },
+      {
+        id: "0138-4", item: 4, especificacao: "Alcool etilico hidratado 70%, frasco com 1 litro", unidade: "FR",
+        quantidades: { educacao: 25, saude: 240, assistencia: 80, administracao: 20 },
+        cotacoes: [
+          { id: 19, fonte: "pncp", descricao: "Prefeitura de Marilia", documento: "PNCP 77777.888888/2026-03", valorUnitario: 8.2, dataCotacao: "2026-08-04", desconsiderada: false, justificativa: "" },
+          { id: 20, fonte: "sitio_eletronico", descricao: "Distribuidora Higiene Brasil", documento: "www.higienebrasil.com.br", valorUnitario: 8.7, dataCotacao: "2026-08-08", desconsiderada: false, justificativa: "" },
+          { id: 21, fonte: "fornecedor", descricao: "Hospitalar Sul LTDA", documento: "CNPJ 66.777.888/0001-99", valorUnitario: 9.4, dataCotacao: "2026-08-11", desconsiderada: false, justificativa: "" },
+        ],
+      }
     ],
   },
   {
@@ -145,20 +261,68 @@ export const demoProcessos: Processo[] = [
     objeto: "Manutencao preventiva de veiculos",
     prazoLimite: "10/09/2026",
     status: "em_montagem",
+    metodoPreco: "media",
+    justificativaMetodo: "",
     secretariaSolicitante: "educacao",
     responsavel: "Marina Alves",
     atualizadoEm: "18/08/2026, 16:40",
     notas: "",
     itens: [
-      { id: "0129-1", item: 1, especificacao: "Troca de oleo do motor com substituicao de filtro, veiculo leve", unidade: "SV", quantidades: { educacao: 18, saude: 8, assistencia: 5, administracao: 4 }, cotacoes: { bnc: 0, pncp: 0, mercado: 0 } },
-      { id: "0129-2", item: 2, especificacao: "Alinhamento de direcao e balanceamento das quatro rodas, veiculo leve", unidade: "SV", quantidades: { educacao: 18, saude: 8, assistencia: 5, administracao: 4 }, cotacoes: { bnc: 0, pncp: 0, mercado: 0 } },
-      { id: "0129-3", item: 3, especificacao: "Jogo de pastilhas de freio dianteiras para onibus escolar", unidade: "JG", quantidades: { educacao: 12, saude: 0, assistencia: 0, administracao: 0 }, cotacoes: { bnc: 0, pncp: 0, mercado: 0 } },
+      {
+        id: "0129-1", item: 1, especificacao: "Troca de oleo do motor com substituicao de filtro, veiculo leve", unidade: "SV",
+        quantidades: { educacao: 18, saude: 8, assistencia: 5, administracao: 4 },
+        cotacoes: [],
+      },
+      {
+        id: "0129-2", item: 2, especificacao: "Alinhamento de direcao e balanceamento das quatro rodas, veiculo leve", unidade: "SV",
+        quantidades: { educacao: 18, saude: 8, assistencia: 5, administracao: 4 },
+        cotacoes: [],
+      },
+      {
+        id: "0129-3", item: 3, especificacao: "Jogo de pastilhas de freio dianteiras para onibus escolar", unidade: "JG",
+        quantidades: { educacao: 12, saude: 0, assistencia: 0, administracao: 0 },
+        cotacoes: [],
+      }
     ],
   },
 ];
 
 export function findProcesso(id: string) {
   return demoProcessos.find((processo) => processo.id === id);
+}
+
+/**
+ * Fases pelas quais um processo pode andar. Cada uma libera um tipo de edicao,
+ * o que evita que secretaria e setor de compras mexam na mesma coisa ao mesmo
+ * tempo.
+ */
+export const transicoesDeStatus: Record<ProcessoStatus, ProcessoStatus[]> = {
+  em_montagem: ["coleta_quantidades", "cancelado"],
+  coleta_quantidades: ["em_cotacao", "em_montagem", "cancelado"],
+  em_cotacao: ["enviado_licitacao", "coleta_quantidades", "cancelado"],
+  enviado_licitacao: ["em_cotacao", "cancelado"],
+  cancelado: ["em_montagem"],
+};
+
+export const statusDescricoes: Record<ProcessoStatus, string> = {
+  em_montagem: "O Setor de Compras define os itens do lote.",
+  coleta_quantidades: "As secretarias informam quanto cada uma precisa.",
+  em_cotacao: "O Setor de Compras reune as cotacoes de cada item.",
+  enviado_licitacao: "Mapa fechado e encaminhado; o lote fica somente para leitura.",
+  cancelado: "Processo encerrado sem contratacao.",
+};
+
+/** Itens, especificacao e unidade so mudam enquanto o lote esta sendo montado. */
+export function estruturaEditavel(status: ProcessoStatus) {
+  return status === "em_montagem";
+}
+
+export function quantidadesEditaveis(status: ProcessoStatus) {
+  return status === "em_montagem" || status === "coleta_quantidades";
+}
+
+export function cotacoesEditaveis(status: ProcessoStatus) {
+  return status === "em_montagem" || status === "em_cotacao";
 }
 
 export function statusTone(status: ProcessoStatus) {
@@ -171,17 +335,64 @@ export function itemTotalQuantity(item: LoteItem) {
   return Object.values(item.quantidades).reduce((total, quantity) => total + Number(quantity || 0), 0);
 }
 
-export function itemAverage(item: LoteItem) {
-  const values = Object.values(item.cotacoes).filter((value) => value > 0);
-  return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+/** Cotacoes que entram na conta: as nao desconsideradas, com valor positivo. */
+export function cotacoesValidas(item: LoteItem) {
+  return (item.cotacoes ?? []).filter((cotacao) => !cotacao.desconsiderada && cotacao.valorUnitario > 0);
 }
 
-export function quotesFilled(item: LoteItem) {
-  return Object.values(item.cotacoes).filter((value) => value > 0).length;
+export function precoUnitario(item: LoteItem, metodo: MetodoPreco) {
+  const valores = cotacoesValidas(item).map((cotacao) => cotacao.valorUnitario).sort((a, b) => a - b);
+  if (!valores.length) return 0;
+  if (metodo === "menor") return valores[0];
+  if (metodo === "mediana") {
+    const meio = Math.floor(valores.length / 2);
+    return valores.length % 2 ? valores[meio] : (valores[meio - 1] + valores[meio]) / 2;
+  }
+  return valores.reduce((total, valor) => total + valor, 0) / valores.length;
 }
 
-export function loteTotal(items: LoteItem[]) {
-  return items.reduce((total, item) => total + itemAverage(item) * itemTotalQuantity(item), 0);
+export function medianaDe(valores: number[]) {
+  if (!valores.length) return 0;
+  const ordenados = [...valores].sort((a, b) => a - b);
+  const meio = Math.floor(ordenados.length / 2);
+  return ordenados.length % 2 ? ordenados[meio] : (ordenados[meio - 1] + ordenados[meio]) / 2;
+}
+
+/**
+ * Coeficiente de variacao da cesta de precos. Acima de 25% a dispersao e alta o
+ * bastante para merecer analise antes de fechar o valor de referencia.
+ */
+export function coeficienteVariacao(item: LoteItem) {
+  const valores = cotacoesValidas(item).map((cotacao) => cotacao.valorUnitario);
+  if (valores.length < 2) return 0;
+  const media = valores.reduce((total, valor) => total + valor, 0) / valores.length;
+  if (!media) return 0;
+  const variancia = valores.reduce((total, valor) => total + (valor - media) ** 2, 0) / valores.length;
+  return Math.sqrt(variancia) / media;
+}
+
+/**
+ * Art. 6, par. 1 da IN 65/2021: precos excessivamente elevados ou inexequiveis
+ * devem ser desconsiderados com justificativa. A norma nao fixa um corte, entao
+ * aqui e apenas uma sugestao de analise — quem decide e o comprador.
+ */
+export function cotacoesDestoantes(item: LoteItem) {
+  const validas = cotacoesValidas(item);
+  if (validas.length < 3) return [] as Cotacao[];
+  const mediana = medianaDe(validas.map((cotacao) => cotacao.valorUnitario));
+  if (!mediana) return [] as Cotacao[];
+  return validas.filter((cotacao) => Math.abs(cotacao.valorUnitario - mediana) / mediana > 0.25);
+}
+
+/** Art. 6, par. 4: a cesta deve reunir ao menos tres precos sempre que possivel. */
+export const minimoDeCotacoes = 3;
+
+export function itemPendente(item: LoteItem) {
+  return cotacoesValidas(item).length < minimoDeCotacoes;
+}
+
+export function loteTotal(items: LoteItem[], metodo: MetodoPreco = "media") {
+  return items.reduce((total, item) => total + precoUnitario(item, metodo) * itemTotalQuantity(item), 0);
 }
 
 export function quantidadeDe(item: LoteItem, chave: Secretaria) {

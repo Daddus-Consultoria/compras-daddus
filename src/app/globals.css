@@ -72,3 +72,28 @@ button { font: inherit; }
 .daddus-nova-secretaria { align-items: center; display: flex; gap: 9px; margin-top: 12px; }
 .daddus-nova-secretaria input { border: 1px solid var(--line); border-radius: 4px; flex: 1; font: inherit; font-size: 11px; outline-color: var(--primary); padding: 8px 10px; }
 .daddus-table code { background: #f2f2f4; border-radius: 3px; font-size: 9px; padding: 2px 5px; }
+
+.daddus-fase { align-items: center; background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--primary); border-radius: 5px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; margin-bottom: 14px; padding: 13px 16px; }
+.daddus-fase strong { display: block; font-size: 12px; }
+.daddus-fase span { color: var(--muted); font-size: 10px; }
+.daddus-metodo { align-items: center; color: var(--muted); display: flex; font-size: 10px; gap: 6px; }
+.daddus-metodo select { border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 10px; padding: 7px 8px; }
+.daddus-row-action.pendente { color: var(--yellow); }
+.lot-table tr.expandida > td { background: var(--soft-primary); }
+.linha-cotacoes > td { background: #fbfbfc; padding: 0 !important; }
+.daddus-cotacoes { padding: 14px 16px 16px; }
+.daddus-cotacoes-resumo { color: var(--muted); display: flex; flex-wrap: wrap; font-size: 10px; gap: 16px; margin-bottom: 10px; }
+.daddus-cotacoes-resumo strong { color: var(--ink); }
+.daddus-cotacoes-resumo .alerta { color: var(--yellow); font-weight: 600; }
+.cotacoes-table { background: #fff; }
+.cotacoes-table td { font-size: 10px; vertical-align: top; }
+.cotacoes-table td.documento { color: var(--muted); max-width: 190px; overflow-wrap: anywhere; }
+.cotacoes-table td.valor { font-weight: 600; white-space: nowrap; }
+.cotacoes-table td.valor small { color: var(--muted); display: block; font-weight: 400; max-width: 210px; }
+.cotacoes-table tr.desconsiderada td { opacity: 0.55; text-decoration: line-through; }
+.cotacoes-table tr.desconsiderada td.valor small { text-decoration: none; }
+.daddus-nova-cotacao { align-items: end; display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.daddus-nova-cotacao label { color: #55555d; display: flex; flex-direction: column; font-size: 9px; font-weight: 600; gap: 4px; }
+.daddus-nova-cotacao input, .daddus-nova-cotacao select { border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 11px; outline-color: var(--primary); padding: 7px 8px; }
+.daddus-nova-cotacao input[name="valorUnitario"] { width: 110px; }
+.daddus-nova-cotacao input[name="dataCotacao"] { width: 105px; }

@@ -7,9 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrar": "node scripts/db.mjs migrar",
-    "db:resetar": "node scripts/db.mjs resetar",
-    "db:semear": "node --experimental-strip-types scripts/semear.mjs"
+    "db:migrar": "node --env-file-if-exists=.env.local scripts/db.mjs migrar",
+    "db:resetar": "node --env-file-if-exists=.env.local scripts/db.mjs resetar",
+    "db:semear": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/semear.mjs"
   },
   "dependencies": {
     "jspdf": "^4.2.1",

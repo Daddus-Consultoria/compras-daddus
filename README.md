@@ -205,3 +205,69 @@ Para tirar uma secretaria de circulacao ha duas saidas:
   na planilha, mas preserva o que ja foi lancado. E o caminho normal.
 - **Excluir** so funciona se ela nunca foi usada. Havendo quantidade, processo,
   solicitacao ou usuario ligado, a API recusa e diz exatamente o que prende.
+
+## Pesquisa de precos
+
+O modulo de cotacao segue a **IN SEGES/ME 65/2021** e o art. 23 da **Lei
+14.133/2021**, que definem como o setor publico forma o preco de referencia.
+
+### Fontes
+
+Cada preco lancado registra de onde veio, quando foi obtido e o documento que o
+comprova. As fontes seguem a ordem de preferencia do art. 5 da IN — bases
+publicas primeiro, fornecedor por ultimo:
+
+| Fonte | O que e |
+| --- | --- |
+| Painel de Precos | Painel de Precos do Governo Federal |
+| PNCP | Portal Nacional de Contratacoes Publicas |
+| Contratacao similar | Contrato de outro ente publico, dos ultimos 12 meses |
+| Tabela de referencia | Tabelas oficiais (SINAPI, SICRO, CMED) |
+| Sitio eletronico | Sitios especializados ou de dominio amplo |
+| Midia especializada | Publicacoes do setor |
+| Fornecedor | Pesquisa direta |
+
+### Formacao do preco
+
+O valor de referencia sai da **media**, da **mediana** ou do **menor preco** das
+cotacoes consideradas (art. 6). Metodo diferente de media exige justificativa,
+que entra no PDF.
+
+O sistema nao exclui preco sozinho. Ele sinaliza:
+
+- **menos de tres cotacoes**, que e a cesta minima recomendada pelo art. 6, par. 4;
+- **dispersao acima de 25%** no coeficiente de variacao da cesta;
+- **cotacoes que se afastam mais de 25% da mediana**, candidatas a analise.
+
+Desconsiderar um preco exige justificativa escrita, como manda o art. 6, par. 1
+(precos excessivamente elevados ou inexequiveis). O preco desconsiderado nao e
+apagado: continua no mapa, riscado e com o motivo, porque e isso que sustenta a
+decisao no processo administrativo.
+
+## Fases do processo
+
+Cada fase libera um tipo de edicao. E o que evita que secretaria e setor de
+compras mexam na mesma coisa ao mesmo tempo.
+
+| Fase | Quem edita o que |
+| --- | --- |
+| Em elaboracao | Compras monta os itens, especificacao e unidade |
+| Coleta de quantidades | Cada secretaria lanca a propria quantidade |
+| Em cotacao | Compras lanca as cotacoes; quantidades travadas |
+| Enviado para licitacao | Somente leitura |
+| Cancelado | Somente leitura |
+
+Somente o Setor de Compras move o processo, e apenas para as fases vizinhas
+(`transicoesDeStatus`). Toda mudanca fica registrada em `historico_status`, com
+quem moveu, quando e a observacao.
+
+## Mapa de precos em PDF
+
+O botao "Exportar PDF oficial" emite o mapa com a identidade do municipio:
+brasao, nome, CNPJ e endereco do Setor de Compras no cabecalho. O documento traz
+a composicao do lote com as quantidades por secretaria, o detalhamento de cada
+cotacao (fonte, origem, documento, data, valor e situacao) e o bloco de
+metodologia com o metodo adotado e a base legal.
+
+Logo em PNG ou JPEG entra no cabecalho. SVG nao — o jsPDF nao rasteriza vetor,
+entao nesse caso o documento sai sem brasao em vez de falhar.
