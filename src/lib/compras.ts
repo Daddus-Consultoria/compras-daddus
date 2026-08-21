@@ -1,3 +1,5 @@
+import type { Papel } from "@/lib/auth/papeis";
+
 /**
  * A chave de uma secretaria da prefeitura. Nao e mais uma lista fechada: cada
  * municipio cadastra as suas, entao o conjunto vem do banco.
@@ -107,15 +109,38 @@ export type PrefeituraConfig = {
 };
 
 /** Os valores sao os mesmos do enum processo_status no banco. */
-export type ProcessoStatus = "em_montagem" | "coleta_quantidades" | "em_cotacao" | "enviado_licitacao" | "cancelado";
+export type ProcessoStatus =
+  | "em_montagem"
+  | "coleta_quantidades"
+  | "em_cotacao"
+  | "cotacao_concluida"
+  | "mapa_elaborado"
+  | "enviado_licitacao"
+  | "em_cpl"
+  | "contrato_recebido"
+  | "contrato_ativo"
+  | "encerrado"
+  | "cancelado";
 
 export const processoStatusLabels: Record<ProcessoStatus, string> = {
   em_montagem: "Em elaboracao",
   coleta_quantidades: "Coleta de quantidades",
   em_cotacao: "Em cotacao",
-  enviado_licitacao: "Enviado para licitacao",
+  cotacao_concluida: "Cotacao concluida",
+  mapa_elaborado: "Mapa elaborado",
+  enviado_licitacao: "Mapa enviado a CPL",
+  em_cpl: "Em processamento na CPL",
+  contrato_recebido: "Contrato recebido",
+  contrato_ativo: "Contrato ativo",
+  encerrado: "Encerrado",
   cancelado: "Cancelado",
 };
+
+/** A ordem em que as fases aparecem em filtros e linhas do tempo. */
+export const fasesEmOrdem: ProcessoStatus[] = [
+  "em_montagem", "coleta_quantidades", "em_cotacao", "cotacao_concluida", "mapa_elaborado",
+  "enviado_licitacao", "em_cpl", "contrato_recebido", "contrato_ativo", "encerrado", "cancelado",
+];
 
 /** Os valores sao os mesmos do enum solicitacao_status no banco. */
 export type SolicitacaoStatus = "pendente" | "em_cotacao" | "em_licitacao" | "concluido" | "recusado";
@@ -316,8 +341,14 @@ export function findProcesso(id: string) {
 export const transicoesDeStatus: Record<ProcessoStatus, ProcessoStatus[]> = {
   em_montagem: ["coleta_quantidades", "cancelado"],
   coleta_quantidades: ["em_cotacao", "em_montagem", "cancelado"],
-  em_cotacao: ["enviado_licitacao", "coleta_quantidades", "cancelado"],
-  enviado_licitacao: ["em_cotacao", "cancelado"],
+  em_cotacao: ["cotacao_concluida", "coleta_quantidades", "cancelado"],
+  cotacao_concluida: ["mapa_elaborado", "em_cotacao", "cancelado"],
+  mapa_elaborado: ["enviado_licitacao", "cotacao_concluida", "cancelado"],
+  enviado_licitacao: ["em_cpl", "mapa_elaborado", "cancelado"],
+  em_cpl: ["contrato_recebido", "enviado_licitacao", "cancelado"],
+  contrato_recebido: ["contrato_ativo", "em_cpl", "cancelado"],
+  contrato_ativo: ["encerrado", "cancelado"],
+  encerrado: [],
   cancelado: ["em_montagem"],
 };
 
@@ -325,9 +356,37 @@ export const statusDescricoes: Record<ProcessoStatus, string> = {
   em_montagem: "O Setor de Compras define os itens do lote.",
   coleta_quantidades: "As secretarias informam quanto cada uma precisa.",
   em_cotacao: "O Setor de Compras reune as cotacoes de cada item.",
-  enviado_licitacao: "Mapa fechado e encaminhado; o lote fica somente para leitura.",
+  cotacao_concluida: "Precos levantados e metodo definido; falta gerar o mapa.",
+  mapa_elaborado: "Mapa de precos pronto, aguardando o envio a CPL.",
+  enviado_licitacao: "Mapa encaminhado; o lote fica somente para leitura ate a CPL receber.",
+  em_cpl: "A CPL conduz a licitacao e registra a tramitacao.",
+  contrato_recebido: "A CPL devolveu o contrato; falta o Setor de Compras cadastra-lo.",
+  contrato_ativo: "Contrato cadastrado e em vigencia, gerando saldo para as secretarias.",
+  encerrado: "Contrato executado ou vencido; nao ha mais saldo a consumir.",
   cancelado: "Processo encerrado sem contratacao.",
 };
+
+/**
+ * Fases que quem conduz e a CPL. As demais sao do Setor de Compras. E o que
+ * impede compras de dar por recebido um processo que a comissao nunca pegou.
+ */
+export const fasesConduzidasPelaCpl: ProcessoStatus[] = ["em_cpl", "contrato_recebido"];
+
+/** A fila da CPL: o que ja saiu de compras e ainda nao virou contrato cadastrado. */
+export const fasesNaCpl: ProcessoStatus[] = ["enviado_licitacao", "em_cpl", "contrato_recebido"];
+
+/**
+ * Quem pode mover o processo para uma fase. Compras conduz o processo inteiro,
+ * menos as duas fases que so a comissao tem como atestar.
+ */
+export function passouPelaCpl(status: ProcessoStatus) {
+  return ["enviado_licitacao", "em_cpl", "contrato_recebido", "contrato_ativo", "encerrado"].includes(status);
+}
+
+export function podeMoverParaFase(papel: Papel, destino: ProcessoStatus) {
+  if (fasesConduzidasPelaCpl.includes(destino)) return papel === "cpl";
+  return papel === "compras";
+}
 
 /** Itens, especificacao e unidade so mudam enquanto o lote esta sendo montado. */
 export function estruturaEditavel(status: ProcessoStatus) {
@@ -369,8 +428,9 @@ export function cotacoesEditaveis(status: ProcessoStatus) {
 }
 
 export function statusTone(status: ProcessoStatus) {
-  if (status === "em_cotacao") return "blue";
-  if (status === "enviado_licitacao" || status === "coleta_quantidades") return "yellow";
+  if (status === "em_cotacao" || status === "em_cpl") return "blue";
+  if (status === "contrato_ativo") return "green";
+  if (["coleta_quantidades", "cotacao_concluida", "mapa_elaborado", "enviado_licitacao", "contrato_recebido"].includes(status)) return "yellow";
   return "gray";
 }
 

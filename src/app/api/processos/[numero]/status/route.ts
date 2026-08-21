@@ -1,6 +1,6 @@
-import { podeEditarTodasAsColunas } from "@/lib/auth/papeis";
+import { podeEditarTodasAsColunas, podeOperarCpl } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { metodoLabels, processoStatusLabels, transicoesDeStatus, type MetodoPreco, type ProcessoStatus } from "@/lib/compras";
+import { metodoLabels, podeMoverParaFase, processoStatusLabels, transicoesDeStatus, type MetodoPreco, type ProcessoStatus } from "@/lib/compras";
 import { alterarStatus, definirMetodo, lerProcesso } from "@/lib/repositorio/processos";
 import { NextResponse } from "next/server";
 
@@ -15,7 +15,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ nu
   if (modoDemonstracao() || sessao.prefeituraId === null) {
     return NextResponse.json({ error: "Banco de dados nao configurado: nada foi gravado." }, { status: 503 });
   }
-  if (!podeEditarTodasAsColunas(sessao.papel)) {
+  // As fases da comissao ficam de fora daqui: quem as move e o registro de
+  // tramite da CPL, nao uma escolha de fase na tela de compras.
+  if (!podeEditarTodasAsColunas(sessao.papel) && !podeOperarCpl(sessao.papel)) {
     return NextResponse.json({ error: "Somente o Setor de Compras conduz o andamento do processo." }, { status: 403 });
   }
 
@@ -31,6 +33,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ nu
 
   try {
     if (corpo.metodo !== undefined) {
+      if (!podeEditarTodasAsColunas(sessao.papel)) {
+        return NextResponse.json({ error: "O metodo de calculo do preco e definido pelo Setor de Compras." }, { status: 403 });
+      }
       const metodo = String(corpo.metodo) as MetodoPreco;
       if (!(metodo in metodoLabels)) return NextResponse.json({ error: `Metodo invalido: ${metodo}.` }, { status: 400 });
       await definirMetodo(sessao.prefeituraId, numero, metodo, String(corpo.justificativaMetodo ?? processo.justificativaMetodo));
@@ -47,6 +52,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ nu
         );
       }
       if (novo !== processo.status) {
+        if (!podeMoverParaFase(sessao.papel, novo)) {
+          return NextResponse.json(
+            { error: `"${processoStatusLabels[novo]}" e registrada pela CPL, na tramitacao do processo.` },
+            { status: 403 },
+          );
+        }
         await alterarStatus(sessao.prefeituraId, numero, novo, sessao.id || null, String(corpo.observacao ?? "").trim());
       }
     }
