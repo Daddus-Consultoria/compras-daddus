@@ -35,19 +35,19 @@ function linksDoPapel(papel: Papel): NavLink[] {
   if (papel === "secretario") {
     return [
       { href: "/painel/secretario/solicitacoes", label: "Minhas solicitacoes", icon: ClipboardList },
-      { href: "/painel/compras", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras"] },
+      { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
     ];
   }
   if (papel === "gestor") {
     return [
       { href: "/painel/compras", label: "Acompanhamento", icon: LayoutDashboard, exact: true },
-      { href: "/painel/compras#processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
+      { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
     ];
   }
   return [
     { href: "/painel/compras", label: "Central de compras", icon: LayoutDashboard, exact: true },
     { href: "/painel/secretario/solicitacoes", label: "Solicitacoes", icon: ClipboardList },
-    { href: "/painel/compras#processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
+    { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
     { href: "/painel/configuracoes", label: "Configuracao da prefeitura", icon: Settings2 },
   ];
 }

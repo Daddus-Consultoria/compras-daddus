@@ -2,17 +2,13 @@
 
 import { AgendaPessoal } from "@/components/compras/AgendaPessoal";
 import { AppShell } from "@/components/compras/AppShell";
+import { ListaProcessos } from "@/components/compras/ListaProcessos";
 import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
-import { cotacoesValidas, loteTotal, minimoDeCotacoes, money, nomeSecretaria, processoStatusLabels, statusTone, type Processo, type SecretariaInfo } from "@/lib/compras";
-import { ArrowUpRight, BellRing, CalendarClock, CheckCircle2, ClipboardList, FileText, Plus, Search, Timer } from "lucide-react";
+import { loteTotal, money, type Processo, type SecretariaInfo } from "@/lib/compras";
+import { ArrowUpRight, BellRing, CheckCircle2, ClipboardList, FileText, Plus, Timer } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-
-/** Itens do lote que ainda nao alcancaram o minimo de precos da IN 65/2021. */
-function itensSemPreco(processo: Processo) {
-  return processo.itens.filter((item) => cotacoesValidas(item).length < minimoDeCotacoes).length;
-}
+import { useEffect, useState } from "react";
 
 /** "28/08/2026" -> data comparavel, sem depender do fuso do navegador. */
 function parseDataBr(valor: string) {
@@ -22,7 +18,6 @@ function parseDataBr(valor: string) {
 }
 
 export function CentralCompras({ processos, sessao, secretarias }: { processos: Processo[]; sessao: Sessao; secretarias: SecretariaInfo[] }) {
-  const [busca, setBusca] = useState("");
   const [solicitacoes, setSolicitacoes] = useState<unknown[]>([]);
 
   useEffect(() => {
@@ -31,15 +26,6 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
       .then((dados) => setSolicitacoes(Array.isArray(dados) ? dados : []))
       .catch(() => setSolicitacoes([]));
   }, []);
-
-  const processosFiltrados = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    if (!termo) return processos;
-    return processos.filter((processo) =>
-      [processo.id, processo.objeto, nomeSecretaria(secretarias, processo.secretariaSolicitante), processoStatusLabels[processo.status]]
-        .some((campo) => campo.toLowerCase().includes(termo)),
-    );
-  }, [busca, processos, secretarias]);
 
   const emCotacao = processos.filter((processo) => processo.status === "em_cotacao").length;
   const valorEstimado = processos.reduce((total, processo) => total + loteTotal(processo.itens, processo.metodoPreco), 0);
@@ -77,48 +63,15 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
       </section>
 
       <div className="daddus-content-grid">
-        <section className="daddus-table-card" id="processos">
-          <div className="daddus-card-heading">
-            <div>
-              <span className="daddus-overline">Acompanhamento</span>
-              <h3>Lista mestra de processos e lotes</h3>
-            </div>
-            <div className="daddus-search">
-              <Search size={15} />
-              <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar processo ou objeto" aria-label="Buscar processo ou objeto" />
-            </div>
-          </div>
-          <div className="daddus-table-wrap">
-            <table className="daddus-table">
-              <thead>
-                <tr><th>Nº Processo</th><th>Objeto</th><th>Prazo limite</th><th>Status</th><th>Cotacoes</th><th>Acoes</th></tr>
-              </thead>
-              <tbody>
-                {processosFiltrados.map((processo) => (
-                  <tr key={processo.id}>
-                    <td><strong>PE {processo.id}</strong><small>{nomeSecretaria(secretarias, processo.secretariaSolicitante)}</small></td>
-                    <td>{processo.objeto}</td>
-                    <td><span className="deadline"><CalendarClock size={14} /> {processo.prazoLimite}</span></td>
-                    <td><span className={`daddus-status ${statusTone(processo.status)}`}>{processoStatusLabels[processo.status]}</span></td>
-                    <td>
-                      {itensSemPreco(processo) > 0 ? (
-                        <Link href={`/painel/compras/processo/${processo.id}`} className="daddus-row-action pendente">
-                          {itensSemPreco(processo)} {itensSemPreco(processo) === 1 ? "item sem preco" : "itens sem preco"}
-                        </Link>
-                      ) : (
-                        <span className="daddus-status gray">{processo.itens.length ? "precos completos" : "lote vazio"}</span>
-                      )}
-                    </td>
-                    <td><Link href={`/painel/compras/processo/${processo.id}`} className="daddus-row-action">Abrir <ArrowUpRight size={14} /></Link></td>
-                  </tr>
-                ))}
-                {!processosFiltrados.length && (
-                  <tr><td colSpan={6} className="daddus-empty">{processos.length ? `Nenhum processo encontrado para “${busca}”.` : "Nenhum processo cadastrado."}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <ListaProcessos
+          processos={processos}
+          secretarias={secretarias}
+          rodape={
+            <Link href="/painel/compras/processos" className="daddus-card-rodape">
+              Ver todos os processos e lotes <ArrowUpRight size={14} />
+            </Link>
+          }
+        />
 
         <AgendaPessoal processos={processos} />
 
