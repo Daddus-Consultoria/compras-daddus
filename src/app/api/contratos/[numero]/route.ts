@@ -90,7 +90,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ nu
         status: corpo.status === undefined ? undefined : (String(corpo.status) as ContratoStatus),
       });
     }
-    if (itens) await salvarItensContrato(sessao.prefeituraId, numero, itens);
+    if (itens) {
+      const resultado = await salvarItensContrato(sessao.prefeituraId, numero, itens);
+      if ("erro" in resultado) {
+        if (resultado.erro !== "abaixo-do-autorizado") {
+          return NextResponse.json({ error: `Contrato ${numero} nao encontrado.` }, { status: 404 });
+        }
+        // O item ja tem fornecimento autorizado: tirar ou encolher abaixo disso
+        // criaria saldo negativo, entao a lista inteira e recusada.
+        const presos = resultado.itens ?? [];
+        const lista = presos
+          .map((item) => `item ${item.item}: ${item.nova} para ${item.autorizada} ja autorizados`)
+          .join("; ");
+        return NextResponse.json(
+          {
+            error: `Ha fornecimento autorizado acima do que voce quer deixar contratado (${lista}). Estorne os pedidos antes de reduzir o contrato.`,
+            itens: presos,
+          },
+          { status: 409 },
+        );
+      }
+    }
     return NextResponse.json(await lerContrato(sessao.prefeituraId, numero));
   } catch (erro) {
     return NextResponse.json({ error: (erro as Error).message }, { status: 500 });
@@ -107,7 +127,17 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!podeGerenciarContratos(sessao.papel)) {
     return NextResponse.json({ error: "Somente o Setor de Compras exclui contratos." }, { status: 403 });
   }
-  const removido = await removerContrato(sessao.prefeituraId, numero);
-  if (!removido) return NextResponse.json({ error: `Contrato ${numero} nao encontrado.` }, { status: 404 });
+  const resultado = await removerContrato(sessao.prefeituraId, numero);
+  if ("erro" in resultado) {
+    if (resultado.erro === "nao-encontrado") {
+      return NextResponse.json({ error: `Contrato ${numero} nao encontrado.` }, { status: 404 });
+    }
+    return NextResponse.json(
+      {
+        error: `O contrato ${numero} tem ${resultado.pedidos} ${resultado.pedidos === 1 ? "pedido de fornecimento" : "pedidos de fornecimento"} registrados e nao pode ser excluido.`,
+      },
+      { status: 409 },
+    );
+  }
   return NextResponse.json({ removido: numero });
 }

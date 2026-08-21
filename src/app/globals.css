@@ -157,3 +157,15 @@ button { font: inherit; }
 .daddus-modal-linha label { flex: 1; }
 .daddus-modal-acoes { border-top: 1px solid var(--line); display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; padding-top: 16px; }
 .daddus-modal .daddus-inline-warning { margin: 16px 20px 0; }
+
+/* Fase 4: pedidos de fornecimento e saldo do contrato */
+.daddus-modal-larga { max-width: 860px; }
+.daddus-modal-larga .daddus-table { min-width: 620px; }
+.daddus-modal-larga .daddus-table-wrap { border: 1px solid var(--line); border-radius: 4px; }
+.daddus-modal .daddus-modal-acoes .daddus-muted { margin-right: auto; }
+.daddus-pedido-detalhe { background: #fafafa; border-radius: 4px; padding: 14px 16px; }
+.daddus-pedido-detalhe p { color: #55555d; font-size: 11px; line-height: 1.6; margin: 0 0 8px; }
+.daddus-pedido-detalhe p strong { color: #303036; display: block; font-size: 9px; letter-spacing: .03em; margin-bottom: 3px; text-transform: uppercase; }
+.daddus-pedido-detalhe .daddus-table { background: #fff; border: 1px solid var(--line); border-radius: 4px; margin-top: 10px; min-width: 560px; }
+.daddus-linha-acoes button { background: none; border: 0; cursor: pointer; }
+.daddus-linha-acoes button:disabled { cursor: not-allowed; opacity: .5; }

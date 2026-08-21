@@ -1,6 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/compras/AppShell";
+import { SaldoDoContrato } from "@/components/compras/SaldoDoContrato";
 import { podeGerenciarContratos } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
 import { money } from "@/lib/compras";
@@ -15,6 +16,7 @@ import {
   type ContratoStatus,
   type ItemContrato,
 } from "@/lib/contratos";
+import type { Pedido, SaldoItem } from "@/lib/pedidos";
 import { AlertTriangle, ArrowLeft, Check, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,12 +33,23 @@ type Campos = {
 };
 
 /**
- * A ficha do contrato e a lista do que foi contratado. O valor nunca e digitado:
- * ele e a soma dos itens, mostrada aqui e recalculada no banco a cada gravacao.
- * Quantidade utilizada e saldo tambem nao aparecem — os dois nascem das
- * movimentacoes, na Fase 4, e nao de um campo preenchido a mao.
+ * A ficha do contrato, a lista do que foi contratado e o saldo que sobra dela.
+ * Nem o valor nem o saldo sao digitados: o valor e a soma dos itens, recalculada
+ * no banco a cada gravacao, e o saldo e o contratado menos o que os pedidos de
+ * fornecimento ja consumiram. Por isso a tabela de saldo nao tem campo editavel
+ * — corrigir saldo se faz estornando o pedido, e nao sobrescrevendo o numero.
  */
-export function ContratoEditor({ contrato, sessao }: { contrato: Contrato; sessao: Sessao }) {
+export function ContratoEditor({
+  contrato,
+  saldo,
+  pedidos,
+  sessao,
+}: {
+  contrato: Contrato;
+  saldo: SaldoItem[];
+  pedidos: Pedido[];
+  sessao: Sessao;
+}) {
   const router = useRouter();
   const editavel = podeGerenciarContratos(sessao.papel) && !sessao.demonstracao;
   const [campos, setCampos] = useState<Campos>({
@@ -257,6 +270,8 @@ export function ContratoEditor({ contrato, sessao }: { contrato: Contrato; sessa
           </table>
         </div>
       </div>
+
+      <SaldoDoContrato saldo={saldo} pedidos={pedidos} />
     </AppShell>
   );
 }
