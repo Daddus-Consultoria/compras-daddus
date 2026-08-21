@@ -15,6 +15,7 @@ import {
   type Processo,
   type SecretariaInfo,
 } from "@/lib/compras";
+import { carregarLogo } from "@/lib/pdf/documento";
 import { FileDown } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -23,36 +24,6 @@ import { useState } from "react";
 const margem = 14;
 const larguraUtil = 269;
 const vinho: [number, number, number] = [150, 24, 48];
-
-/**
- * Busca a logo da prefeitura e devolve algo que o jsPDF aceite. SVG fica de
- * fora porque o jsPDF nao rasteriza vetor; nesse caso o cabecalho sai sem
- * brasao, em vez de quebrar a emissao do documento.
- */
-async function carregarLogo(url: string) {
-  if (!url) return null;
-  try {
-    const resposta = await fetch(url);
-    if (!resposta.ok) return null;
-    const blob = await resposta.blob();
-    if (!["image/png", "image/jpeg"].includes(blob.type)) return null;
-    const dataUrl = await new Promise<string>((resolver, rejeitar) => {
-      const leitor = new FileReader();
-      leitor.onload = () => resolver(String(leitor.result));
-      leitor.onerror = rejeitar;
-      leitor.readAsDataURL(blob);
-    });
-    const dimensoes = await new Promise<{ largura: number; altura: number }>((resolver, rejeitar) => {
-      const imagem = new Image();
-      imagem.onload = () => resolver({ largura: imagem.naturalWidth, altura: imagem.naturalHeight });
-      imagem.onerror = rejeitar;
-      imagem.src = dataUrl;
-    });
-    return { dataUrl, formato: blob.type === "image/png" ? "PNG" : "JPEG", ...dimensoes };
-  } catch {
-    return null;
-  }
-}
 
 export function ExportLicitacaoPDF({
   items,

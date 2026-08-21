@@ -52,6 +52,32 @@ export function podeAbrirSolicitacao(papel: Papel) {
   return papel === "secretario" || papel === "compras";
 }
 
+/**
+ * O DFD e da secretaria que tem a necessidade. O Setor de Compras tambem
+ * registra demanda — a que chega por oficio, fora do portal — e edita a que
+ * ainda nao virou processo; a partir dai o documento e peca do processo.
+ */
+export function podeEditarDemanda(papel: Papel) {
+  return papel === "secretario" || papel === "compras";
+}
+
+/** Demanda, estudo e mapa sao lidos por todos que acompanham a contratacao. */
+export function podeVerDemandas(papel: Papel) {
+  return papel !== "superadmin";
+}
+
+/**
+ * O ETP e elaborado pelo Setor de Compras, que reune a demanda, as quantidades
+ * e a pesquisa de precos. A CPL le e baixa para instruir a licitacao.
+ */
+export function podeEditarEtp(papel: Papel) {
+  return papel === "compras";
+}
+
+export function podeVerEtp(papel: Papel) {
+  return papel !== "superadmin";
+}
+
 /** A fila da CPL e os tramites sao escritos so por ela. */
 export function podeOperarCpl(papel: Papel) {
   return papel === "cpl";

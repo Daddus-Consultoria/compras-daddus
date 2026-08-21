@@ -44,7 +44,7 @@ function linksDoPapel(papel: Papel): NavLink[] {
   }
   if (papel === "secretario") {
     return [
-      { href: "/painel/secretario/solicitacoes", label: "Minhas solicitacoes", icon: ClipboardList },
+      { href: "/painel/secretario/solicitacoes", label: "Minhas demandas (DFD)", icon: ClipboardList },
       { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
       { href: "/painel/compras/contratos", label: "Contratos", icon: FileSignature, match: ["/painel/compras/contrato"] },
       { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck },
@@ -61,7 +61,7 @@ function linksDoPapel(papel: Papel): NavLink[] {
   }
   return [
     { href: "/painel/compras", label: "Central de compras", icon: LayoutDashboard, exact: true },
-    { href: "/painel/secretario/solicitacoes", label: "Solicitacoes", icon: ClipboardList },
+    { href: "/painel/secretario/solicitacoes", label: "Demandas (DFD)", icon: ClipboardList },
     { href: "/painel/compras/processos", label: "Processos e lotes", icon: ShoppingCart, match: ["/painel/compras/processo"] },
     { href: "/painel/compras/contratos", label: "Contratos", icon: FileSignature, match: ["/painel/compras/contrato"] },
     { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck },
