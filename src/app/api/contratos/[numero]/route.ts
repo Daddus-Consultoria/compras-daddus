@@ -1,11 +1,11 @@
 import { podeGerenciarContratos, podeVerContratos } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
+import { dataBrValida } from "@/lib/compras";
 import { contratoStatusLabels, type ContratoStatus, type ItemContrato } from "@/lib/contratos";
 import { obterContrato } from "@/lib/dados";
 import { atualizarContrato, lerContrato, removerContrato, salvarItensContrato } from "@/lib/repositorio/contratos";
 import { NextResponse } from "next/server";
 
-const dataBr = /^\d{2}\/\d{2}\/\d{4}$/;
 
 export async function GET(_request: Request, { params }: { params: Promise<{ numero: string }> }) {
   const { numero } = await params;
@@ -46,8 +46,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ nu
   }
   for (const campo of ["vigenciaInicio", "vigenciaFim"] as const) {
     const valor = corpo[campo];
-    if (valor !== undefined && valor !== null && String(valor) && !dataBr.test(String(valor))) {
-      return NextResponse.json({ error: "As datas de vigencia devem estar no formato DD/MM/AAAA." }, { status: 400 });
+    if (valor !== undefined && valor !== null && String(valor) && !dataBrValida(String(valor))) {
+      return NextResponse.json(
+        { error: `Data de vigencia invalida: ${valor}. Use uma data real, no formato DD/MM/AAAA.` },
+        { status: 400 },
+      );
     }
   }
 

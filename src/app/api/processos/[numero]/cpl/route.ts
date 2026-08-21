@@ -1,11 +1,10 @@
 import { podeOperarCpl } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { processoStatusLabels } from "@/lib/compras";
+import { dataBrValida, processoStatusLabels } from "@/lib/compras";
 import { tramiteLabels, type TramiteTipo } from "@/lib/contratos";
 import { registrarTramite, tramitesDoProcesso } from "@/lib/repositorio/cpl";
 import { NextResponse } from "next/server";
 
-const dataBr = /^\d{2}\/\d{2}\/\d{4}$/;
 
 /** A tramitacao e publica dentro da prefeitura: quem ve o processo, ve por onde ele andou. */
 export async function GET(_request: Request, { params }: { params: Promise<{ numero: string }> }) {
@@ -39,8 +38,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ num
   if (!(tipo in tramiteLabels)) return NextResponse.json({ error: `Tipo de tramite invalido: ${tipo}.` }, { status: 400 });
 
   const data = corpo.data ? String(corpo.data).trim() : "";
-  if (data && !dataBr.test(data)) {
-    return NextResponse.json({ error: "A data do tramite deve estar no formato DD/MM/AAAA." }, { status: 400 });
+  if (data && !dataBrValida(data)) {
+    return NextResponse.json(
+      { error: `Data do tramite invalida: ${data}. Use uma data real, no formato DD/MM/AAAA.` },
+      { status: 400 },
+    );
   }
 
   const observacao = String(corpo.observacao ?? "").trim();

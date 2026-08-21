@@ -1,11 +1,11 @@
 import { podeGerenciarContratos, podeVerContratos } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
+import { dataBrValida } from "@/lib/compras";
 import { contratoStatusLabels, type ContratoStatus } from "@/lib/contratos";
 import { obterContratos } from "@/lib/dados";
 import { criarContrato, proximoNumeroContrato } from "@/lib/repositorio/contratos";
 import { NextResponse } from "next/server";
 
-const dataBr = /^\d{2}\/\d{2}\/\d{4}$/;
 
 export async function GET(request: Request) {
   const sessao = await obterSessao();
@@ -54,8 +54,11 @@ export async function POST(request: Request) {
   if (!fornecedor) return NextResponse.json({ error: "Informe o fornecedor contratado." }, { status: 400 });
   if (!(status in contratoStatusLabels)) return NextResponse.json({ error: `Situacao invalida: ${status}.` }, { status: 400 });
   for (const [rotulo, valor] of [["inicio", vigenciaInicio], ["fim", vigenciaFim]] as const) {
-    if (valor && !dataBr.test(valor)) {
-      return NextResponse.json({ error: `A data de ${rotulo} da vigencia deve estar no formato DD/MM/AAAA.` }, { status: 400 });
+    if (valor && !dataBrValida(valor)) {
+      return NextResponse.json(
+        { error: `Data de ${rotulo} da vigencia invalida: ${valor}. Use uma data real, no formato DD/MM/AAAA.` },
+        { status: 400 },
+      );
     }
   }
   if (vigenciaInicio && vigenciaFim) {

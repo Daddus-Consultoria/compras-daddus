@@ -122,18 +122,15 @@ export async function criarContrato(prefeituraId: number, usuarioId: number | nu
   const itens = processo && dados.copiarItens ? itensDoProcesso(processo) : [];
 
   return emTransacao(async (executar) => {
-    const [existente] = (await executar(
-      "select id from contratos where prefeitura_id = $1 and numero = $2",
-      [prefeituraId, dados.numero],
-    )) as Array<{ id: number }>;
-    if (existente) return { erro: "numero-duplicado" as const };
-
+    // Quem decide a unicidade e o proprio indice, e nao um select antes do
+    // insert: entre os dois cabia outra requisicao com o mesmo numero.
     const [criado] = (await executar(
       `insert into contratos (prefeitura_id, processo_id, numero, fornecedor, cnpj_fornecedor, objeto,
                               vigencia_inicio, vigencia_fim, documento, status, criado_por_id)
        values ($1,
                (select id from processos_compra where prefeitura_id = $1 and numero_processo = $2),
                $3, $4, $5, $6, $7, $8, $9, $10::contrato_status, $11)
+       on conflict (prefeitura_id, numero) do nothing
        returning id`,
       [
         prefeituraId, dados.processoNumero, dados.numero, dados.fornecedor, dados.cnpjFornecedor,
@@ -141,6 +138,7 @@ export async function criarContrato(prefeituraId: number, usuarioId: number | nu
         dados.documento, dados.status, usuarioId,
       ],
     )) as Array<{ id: number }>;
+    if (!criado) return { erro: "numero-duplicado" as const };
 
     for (const item of itens) {
       await executar(
