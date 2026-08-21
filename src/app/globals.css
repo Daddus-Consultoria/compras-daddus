@@ -140,3 +140,6 @@ button { font: inherit; }
 .daddus-nova-tarefa > div input, .daddus-nova-tarefa > div select { flex: 1; }
 .daddus-nova-tarefa .daddus-secondary-button { flex-shrink: 0; padding: 8px 11px; }
 .daddus-inline-warning.agenda { margin: 12px 18px 0; }
+
+.daddus-card-rodape { align-items: center; border-top: 1px solid var(--line); color: var(--primary); display: flex; font-size: 10px; font-weight: 600; gap: 5px; justify-content: center; padding: 13px; }
+.daddus-card-rodape:hover { background: var(--soft-primary); }
