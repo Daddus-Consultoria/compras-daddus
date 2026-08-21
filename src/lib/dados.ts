@@ -1,5 +1,7 @@
 import { demoProcessos, findProcesso, secretariasDemo } from "@/lib/compras";
 import { modoDemonstracao } from "@/lib/auth/sessao";
+import { acharContratoDemo, contratosDemo } from "@/lib/contratos";
+import { lerContrato, listarContratos } from "@/lib/repositorio/contratos";
 import { lerProcesso, listarProcessos } from "@/lib/repositorio/processos";
 import { listarSecretarias } from "@/lib/repositorio/secretarias";
 
@@ -38,5 +40,28 @@ export async function obterSecretarias(prefeituraId: number | null) {
     return await listarSecretarias(prefeituraId);
   } catch {
     return secretariasDemo;
+  }
+}
+
+/** Mesma regra dos processos: sem banco, os contratos de exemplo. */
+export async function obterContratos(prefeituraId: number | null) {
+  if (modoDemonstracao() || prefeituraId === null) {
+    return { origem: "memoria" as OrigemDados, contratos: contratosDemo };
+  }
+  try {
+    return { origem: "postgres" as OrigemDados, contratos: await listarContratos(prefeituraId) };
+  } catch {
+    return { origem: "memoria" as OrigemDados, contratos: contratosDemo };
+  }
+}
+
+export async function obterContrato(prefeituraId: number | null, numero: string) {
+  if (modoDemonstracao() || prefeituraId === null) {
+    return { origem: "memoria" as OrigemDados, contrato: acharContratoDemo(numero) };
+  }
+  try {
+    return { origem: "postgres" as OrigemDados, contrato: await lerContrato(prefeituraId, numero) };
+  } catch {
+    return { origem: "memoria" as OrigemDados, contrato: acharContratoDemo(numero) };
   }
 }

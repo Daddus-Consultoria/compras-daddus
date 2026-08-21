@@ -2,6 +2,7 @@
 
 import {
   cotacoesValidas,
+  fasesEmOrdem,
   minimoDeCotacoes,
   nomeSecretaria,
   processoStatusLabels,
@@ -18,8 +19,6 @@ import { useMemo, useState } from "react";
 function itensSemPreco(processo: Processo) {
   return processo.itens.filter((item) => cotacoesValidas(item).length < minimoDeCotacoes).length;
 }
-
-const fasesEmOrdem: ProcessoStatus[] = ["em_montagem", "coleta_quantidades", "em_cotacao", "enviado_licitacao", "cancelado"];
 
 /**
  * A lista mestra de processos, usada tanto no resumo da central quanto na

@@ -213,7 +213,7 @@ type DadosCotacao = {
 };
 
 /** "12/08/2026" -> "2026-08-12"; qualquer outra coisa vira nulo. */
-function paraDataIso(valor: string | null) {
+export function paraDataIso(valor: string | null) {
   if (!valor) return null;
   const partes = valor.split("/");
   if (partes.length !== 3) return null;
