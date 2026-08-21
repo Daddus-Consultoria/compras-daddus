@@ -1,10 +1,11 @@
 "use client";
 
 import { AppShell } from "@/components/compras/AppShell";
-import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
+import { podeAbrirSolicitacao, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
 import { nomeCurtoSecretaria, solicitacaoStatusLabels, type Secretaria, type SecretariaInfo, type SolicitacaoStatus } from "@/lib/compras";
-import { AlertTriangle, CheckCircle2, Paperclip, Send } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Paperclip, Send } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 type Solicitacao = {
@@ -23,6 +24,7 @@ function formatarData(valor: string) {
 
 export function SolicitacoesSecretaria({ sessao, secretarias }: { sessao: Sessao; secretarias: SecretariaInfo[] }) {
   const podeEnviar = podeAbrirSolicitacao(sessao.papel);
+  const podeVirarProcesso = podeEditarTodasAsColunas(sessao.papel);
   const secretariaFixa = sessao.papel === "secretario" ? sessao.secretariaChave : null;
   const [enviadas, setEnviadas] = useState<Solicitacao[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -147,7 +149,7 @@ export function SolicitacoesSecretaria({ sessao, secretarias }: { sessao: Sessao
         <div className="daddus-table-wrap">
           <table className="daddus-table">
             <thead>
-              <tr><th>Enviada em</th><th>Secretaria</th><th>Objeto</th><th>Status</th></tr>
+              <tr><th>Enviada em</th><th>Secretaria</th><th>Objeto</th><th>Status</th>{podeVirarProcesso && <th>Acoes</th>}</tr>
             </thead>
             <tbody>
               {enviadas.map((solicitacao) => (
@@ -156,10 +158,26 @@ export function SolicitacoesSecretaria({ sessao, secretarias }: { sessao: Sessao
                   <td>{nomeCurtoSecretaria(secretarias, solicitacao.secretaria)}</td>
                   <td>{solicitacao.objeto}</td>
                   <td><span className="daddus-status gray">{solicitacaoStatusLabels[solicitacao.status] || solicitacao.status}</span></td>
+                  {podeVirarProcesso && (
+                    <td>
+                      {solicitacao.status === "pendente" ? (
+                        <Link
+                          href={`/painel/compras/processos?solicitacao=${solicitacao.id}&objeto=${encodeURIComponent(solicitacao.objeto)}&secretaria=${encodeURIComponent(solicitacao.secretaria ?? "")}`}
+                          className="daddus-row-action"
+                        >
+                          Gerar processo <ArrowUpRight size={14} />
+                        </Link>
+                      ) : (
+                        // A situacao real ja esta na coluna ao lado; aqui so cabe
+                        // dizer que nao ha acao — "atendida" mentiria numa recusada.
+                        <span className="daddus-muted">-</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {!enviadas.length && (
-                <tr><td colSpan={4} className="daddus-empty">{carregando ? "Carregando solicitacoes..." : "Nenhuma solicitacao enviada ainda."}</td></tr>
+                <tr><td colSpan={podeVirarProcesso ? 5 : 4} className="daddus-empty">{carregando ? "Carregando solicitacoes..." : "Nenhuma solicitacao enviada ainda."}</td></tr>
               )}
             </tbody>
           </table>
