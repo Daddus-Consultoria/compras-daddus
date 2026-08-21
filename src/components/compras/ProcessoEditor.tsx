@@ -38,7 +38,7 @@ import {
   type Secretaria,
   type SecretariaInfo,
 } from "@/lib/compras";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, ExternalLink, Plus, Trash2, FileSearch } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
@@ -243,6 +243,10 @@ export function ProcessoEditor({
           <p>{processo.objeto} · {nomeSecretaria(secretarias, processo.secretariaSolicitante)}</p>
         </div>
         <div className="daddus-heading-actions">
+          {/* O estudo tecnico vive fora do lote, mas nasce dele: o link fica aqui. */}
+          <Link href={`/painel/compras/etp/${encodeURIComponent(processo.id)}`} className="daddus-secondary-button">
+            <FileSearch size={15} /> Estudo tecnico (ETP)
+          </Link>
           <ExportLicitacaoPDF items={items} prefeitura={prefeitura} processo={processo} secretarias={secretarias} notas={notes} />
           {(podeQuantidade || podeEstrutura) && (
             <button className="daddus-primary-button" type="button" onClick={salvarLote} disabled={salvando}>

@@ -1,5 +1,5 @@
 import type { Secretaria, SolicitacaoStatus } from "@/lib/compras";
-import { consultar, consultarUm } from "@/lib/db";
+import { consultar } from "@/lib/db";
 
 export type Solicitacao = {
   id: string;
@@ -39,24 +39,4 @@ export async function listarSolicitacoes(prefeituraId: number, secretariaId: num
   const valores = secretariaId === null ? [prefeituraId] : [prefeituraId, secretariaId];
   const linhas = await consultar<LinhaSolicitacao>(`${selecao} ${filtro} order by s.criado_em desc`, valores);
   return linhas.map(paraSolicitacao);
-}
-
-export async function criarSolicitacao(dados: {
-  prefeituraId: number;
-  objeto: string;
-  justificativa: string;
-  secretaria: string;
-  autorId: number | null;
-}) {
-  const linha = await consultarUm<LinhaSolicitacao>(
-    `with nova as (
-       insert into solicitacoes (prefeitura_id, objeto, justificativa, secretaria_id, criado_por_id)
-       values ($1, $2, $3, (select id from secretarias where prefeitura_id = $1 and chave = $4), $5)
-       returning id, objeto, justificativa, secretaria_id, status, criado_em
-     )
-     select nova.id, nova.objeto, nova.justificativa, sec.chave as secretaria, nova.status, nova.criado_em
-     from nova left join secretarias sec on sec.id = nova.secretaria_id`,
-    [dados.prefeituraId, dados.objeto, dados.justificativa, dados.secretaria, dados.autorId],
-  );
-  return paraSolicitacao(linha as LinhaSolicitacao);
 }

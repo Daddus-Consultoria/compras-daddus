@@ -122,6 +122,8 @@ demonstracao, nao para uso real: os dados somem a cada reinicio.
 | `item_quantidades` | Quantidade por item e por secretaria, uma linha cada |
 | `cotacoes` | Cotacoes do item, com `fonte` (BNC, PNCP, Mercado) e valor |
 | `solicitacoes` | Pedidos abertos pelas secretarias |
+| `itens_solicitacao` | Itens do DFD, com quantidade e memoria de calculo |
+| `etps` | Estudo tecnico preliminar de cada processo, com o instantaneo da conclusao |
 | `tarefas_processo` | Agenda pessoal de cada usuario, com vinculo opcional a um processo |
 | `ajustes_quantidade` | Cada correcao de quantidade feita pelo Setor de Compras, com motivo |
 | `historico_status` | Toda mudanca de fase do processo, com quem moveu e quando |
@@ -143,7 +145,11 @@ Todas rodam no servidor; o navegador nunca recebe a `DATABASE_URL`.
 | `/api/status` | GET | Diz se os dados vem do Postgres ou do fallback em memoria |
 | `/api/config-prefeitura` | GET, PUT | Dados institucionais do municipio; o PUT aceita `multipart` com a logo |
 | `/api/config-prefeitura/logo` | GET | Devolve os bytes da logo guardada |
-| `/api/solicitacoes` | GET, POST | Pedidos abertos pelas secretarias |
+| `/api/solicitacoes` | GET | Fila de demandas, no formato curto usado pela central |
+| `/api/dfd` | GET, POST | Demandas formalizadas (DFD), com itens e memoria de calculo |
+| `/api/dfd/[numero]` | GET, PATCH | Ficha da demanda; a edicao para quando ela vira processo |
+| `/api/dfd/importar` | GET | Fontes e itens de um documento anterior, para nao redigitar |
+| `/api/etp/[processo]` | GET, PATCH, POST | Estudo tecnico: ler, gravar incisos, concluir e reabrir |
 | `/api/processos` | GET, POST | Processos com seus itens, quantidades e cotacoes; POST abre processo |
 | `/api/processos/[numero]/lote` | PUT | Grava o lote inteiro numa transacao |
 | `/api/processos/[numero]/status` | PATCH | Move o processo de fase e grava o historico |
@@ -171,9 +177,9 @@ Toda pessoa entra com o proprio e-mail e enxerga apenas o fluxo do seu perfil.
 | --- | --- | --- |
 | `superadmin` | Todas as prefeituras | Cria prefeituras e usuarios de qualquer municipio |
 | `admin` | Uma prefeitura | Cria e desativa usuarios da propria prefeitura; edita os dados institucionais |
-| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; cadastra contratos; autoriza pedidos de fornecimento; exporta o PDF |
-| `cpl` | Uma prefeitura | Recebe o mapa de precos, registra a tramitacao da comissao e devolve o processo com o contrato |
-| `secretario` | Uma secretaria | Abre solicitacoes, preenche a quantidade da propria secretaria e pede fornecimento nos contratos |
+| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; elabora o ETP; cadastra contratos; autoriza pedidos de fornecimento; exporta os PDFs |
+| `cpl` | Uma prefeitura | Recebe o mapa de precos, baixa o DFD e o ETP para instruir a licitacao, registra a tramitacao e devolve o processo com o contrato |
+| `secretario` | Uma secretaria | Formaliza a demanda (DFD), preenche a quantidade da propria secretaria e pede fornecimento nos contratos |
 | `gestor` | Uma prefeitura | Acompanha processos, contratos e saldos em somente leitura |
 
 ### Isolamento
@@ -403,3 +409,77 @@ O sino reune o que exige acao e some sozinho quando o motivo acaba:
 
 Na lista de contratos, quem passou de 90% do valor executado aparece destacado:
 e a hora de decidir entre aditivo e novo processo, antes de faltar saldo.
+
+## Demanda: o DFD
+
+A compra comeca na secretaria que precisa dela. O que antes era um recado com
+objeto e justificativa agora e o **Documento de Formalizacao da Demanda** que a
+Lei 14.133/2021 pede (art. 12, VII): prioridade, data pretendida, previsao no
+plano de contratacoes anual, resultados esperados, responsavel — e, sobretudo,
+**itens com quantidade e memoria de calculo**.
+
+A memoria de calculo e o que separa um pedido de um estudo: "120 pacotes" nao
+diz nada; "consumo de 110 pacotes no contrato anterior, mais 9% de matricula
+nova" sustenta o inciso IV do ETP.
+
+O DFD e editavel enquanto nao vira processo. Depois disso ele e peca do processo
+administrativo, e reescreve-lo mudaria a origem de um lote que ja esta em
+cotacao.
+
+### Importar de um relatorio anterior
+
+Redigitar trinta itens e o que faz a secretaria desistir de detalhar a demanda.
+Por isso os itens podem vir de um documento que ela ja tem:
+
+| Fonte | O que traz |
+| --- | --- |
+| Demanda anterior | Os itens de um DFD que a secretaria ja enviou |
+| Processo anterior | Os itens do lote, com a quantidade que **esta** secretaria lancou nele |
+| Consumo de contrato | O que a secretaria de fato consumiu — soma dos pedidos autorizados |
+
+A terceira e a melhor base de calculo, e ja chega escrita: "Consumo autorizado
+desta secretaria no contrato 020/2025: 110 PCT." O recorte e sempre a secretaria
+da sessao — importar de um relatorio anterior nao vira porta para ler o consumo
+da secretaria vizinha.
+
+Quando o Setor de Compras gera o processo a partir do DFD, **o lote ja nasce com
+os itens da demanda** e com a quantidade da secretaria lancada na coluna dela. O
+comprador corrige a especificacao; nao redigita a demanda inteira.
+
+## Estudo Tecnico Preliminar
+
+O ETP (art. 18 da Lei 14.133/2021) fica em `/painel/compras/etp/[processo]`.
+Cinco dos treze incisos o portal responde sozinho, porque os dados ja estao la:
+
+| Inciso | De onde sai |
+| --- | --- |
+| I — Descricao da necessidade | Justificativa, prioridade e prazo do DFD |
+| IV — Quantidades e memoria de calculo | Quantidades por secretaria no lote, mais a memoria de cada item do DFD |
+| V — Levantamento de mercado | Fontes consultadas na pesquisa de precos, contadas e ordenadas |
+| VI — Estimativa do valor | Metodo adotado (media, mediana ou menor), com os precos unitarios |
+| VIII e XIII | Sugestao de texto, que o comprador aceita ou reescreve |
+
+Os demais sao decisao de quem compra e continuam sendo digitados. Os
+obrigatorios do art. 18, par. 2 (I, IV, VI, VIII e XIII) travam a conclusao se
+faltarem; os incisos deixados em branco exigem a justificativa das omissoes,
+como a propria lei manda.
+
+### Rascunho vive, concluido congela
+
+Enquanto o estudo e rascunho, os incisos derivados sao recalculados a cada
+leitura: mexeu na cotacao, o ETP acompanha. **Ao concluir, o que foi apurado e
+congelado num instantaneo** — um estudo assinado nao pode mudar de conteudo
+porque alguem editou uma cotacao na semana seguinte. Reabrir descarta o
+instantaneo e devolve o documento ao calculo vivo, deixando claro que ele voltou
+a ser minuta.
+
+### Quem le, quem baixa
+
+O ETP e elaborado pelo Setor de Compras. A CPL, o gestor, a administracao e a
+secretaria de origem leem e baixam o PDF — e a mesa da CPL lista, para cada
+processo, o DFD de origem e a situacao do estudo, que e o que ela junta a
+licitacao. O sino avisa o comprador quando um processo caminha para a comissao
+sem ETP concluido.
+
+O PDF de minuta sai carimbado como minuta, com aviso no corpo do documento e no
+rodape de todas as paginas, para ninguem juntar rascunho ao processo por engano.
