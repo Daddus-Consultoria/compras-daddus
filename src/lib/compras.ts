@@ -79,7 +79,24 @@ export type LoteItem = {
   unidade: string;
   quantidades: Record<string, number>;
   cotacoes: Cotacao[];
+  ajustes?: AjusteQuantidade[];
 };
+
+/** Diferencas entre o que esta gravado e o que a tela quer gravar. */
+export function diferencasDeQuantidade(gravados: LoteItem[], enviados: LoteItem[], chaves: string[]) {
+  const porNumero = new Map(gravados.map((item) => [item.item, item]));
+  const mudancas: Array<{ item: number; secretaria: string; anterior: number; nova: number }> = [];
+  for (const enviado of enviados) {
+    const gravado = porNumero.get(enviado.item);
+    if (!gravado) continue;
+    for (const chave of chaves) {
+      const anterior = Number(gravado.quantidades[chave] ?? 0);
+      const nova = Number(enviado.quantidades?.[chave] ?? 0);
+      if (anterior !== nova) mudancas.push({ item: enviado.item, secretaria: chave, anterior, nova });
+    }
+  }
+  return mudancas;
+}
 
 export type PrefeituraConfig = {
   estado: string;
@@ -320,6 +337,32 @@ export function estruturaEditavel(status: ProcessoStatus) {
 export function quantidadesEditaveis(status: ProcessoStatus) {
   return status === "em_montagem" || status === "coleta_quantidades";
 }
+
+/**
+ * O Setor de Compras tambem corrige quantidade durante a cotacao — um erro de
+ * digitacao da secretaria nao deveria obrigar a voltar o processo de fase.
+ */
+export function ajusteDeQuantidadePermitido(status: ProcessoStatus) {
+  return status === "em_montagem" || status === "coleta_quantidades" || status === "em_cotacao";
+}
+
+/**
+ * Em elaboracao o lote ainda e rascunho do proprio Setor de Compras, entao o
+ * numero nao tem dono. Da coleta em diante ele foi lancado por uma secretaria,
+ * e sobrescrever exige justificativa.
+ */
+export function ajusteExigeJustificativa(status: ProcessoStatus) {
+  return status !== "em_montagem";
+}
+
+export type AjusteQuantidade = {
+  secretaria: string;
+  anterior: number;
+  nova: number;
+  justificativa: string;
+  usuario: string | null;
+  quando: string;
+};
 
 export function cotacoesEditaveis(status: ProcessoStatus) {
   return status === "em_montagem" || status === "em_cotacao";

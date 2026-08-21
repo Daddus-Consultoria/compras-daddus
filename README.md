@@ -252,8 +252,8 @@ compras mexam na mesma coisa ao mesmo tempo.
 | Fase | Quem edita o que |
 | --- | --- |
 | Em elaboracao | Compras monta os itens, especificacao e unidade |
-| Coleta de quantidades | Cada secretaria lanca a propria quantidade |
-| Em cotacao | Compras lanca as cotacoes; quantidades travadas |
+| Coleta de quantidades | Cada secretaria lanca a propria quantidade; compras ajusta com justificativa |
+| Em cotacao | Compras lanca as cotacoes e pode ajustar quantidade com justificativa |
 | Enviado para licitacao | Somente leitura |
 | Cancelado | Somente leitura |
 
@@ -271,3 +271,23 @@ metodologia com o metodo adotado e a base legal.
 
 Logo em PNG ou JPEG entra no cabecalho. SVG nao — o jsPDF nao rasteriza vetor,
 entao nesse caso o documento sai sem brasao em vez de falhar.
+
+## Ajuste de quantidade pelo Setor de Compras
+
+Um erro de digitacao de uma secretaria nao deveria obrigar a devolver o processo
+de fase. Entao o Setor de Compras corrige a quantidade de qualquer secretaria —
+mas nunca em silencio.
+
+Da fase de coleta em diante, alterar um numero lancado por outra secretaria
+exige justificativa de ao menos 10 caracteres. A tela nao decide isso sozinha: o
+servidor compara o que foi enviado com o que esta gravado, responde **422** com
+a lista do que mudaria (`item 1/saude: 45 para 999`) e so grava quando o motivo
+vem junto. Cancelar o pedido de motivo aborta o salvamento inteiro.
+
+Cada ajuste vira uma linha em `ajustes_quantidade` com o valor anterior, o novo,
+quem alterou, quando e por que. O historico aparece ao expandir o item e sai no
+PDF, num bloco proprio.
+
+Em **Em elaboracao** nao ha essa exigencia: o lote ainda e rascunho do proprio
+Setor de Compras e o numero nao tem dono. A secretaria, por sua vez, nunca
+alcanca coluna alheia — nem enviando justificativa.

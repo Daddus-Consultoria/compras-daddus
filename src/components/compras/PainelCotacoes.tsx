@@ -164,6 +164,22 @@ export function PainelCotacoes({
         </form>
       )}
       <p className="daddus-muted">{fonteDescricoes[fonte]}</p>
+
+      {(item.ajustes?.length ?? 0) > 0 && (
+        <div className="daddus-ajustes">
+          <strong>Ajustes de quantidade</strong>
+          <ul>
+            {item.ajustes!.map((ajuste, indice) => (
+              <li key={indice}>
+                <span className="daddus-status gray">{ajuste.secretaria}</span>
+                <b>{ajuste.anterior} para {ajuste.nova}</b>
+                <em>{ajuste.justificativa}</em>
+                <small>{ajuste.usuario ?? "usuario removido"} · {ajuste.quando}</small>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

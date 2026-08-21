@@ -6,6 +6,8 @@ import { PainelCotacoes } from "@/components/compras/PainelCotacoes";
 import { podeEditarLote, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
 import {
+  ajusteDeQuantidadePermitido,
+  ajusteExigeJustificativa,
   cotacoesEditaveis,
   cotacoesValidas,
   estruturaEditavel,
@@ -61,7 +63,11 @@ export function ProcessoEditor({
   const compras = podeEditarTodasAsColunas(sessao.papel);
   const minhaSecretaria: Secretaria | null = compras ? null : sessao.secretariaChave;
   const podeEstrutura = compras && estruturaEditavel(processo.status);
-  const podeQuantidade = podeEditarLote(sessao.papel) && quantidadesEditaveis(processo.status);
+  // Compras corrige quantidade tambem durante a cotacao, mediante justificativa;
+  // a secretaria so lanca a propria ate o fim da coleta.
+  const podeQuantidade = compras
+    ? ajusteDeQuantidadePermitido(processo.status)
+    : podeEditarLote(sessao.papel) && quantidadesEditaveis(processo.status);
   const podeCotacao = compras && cotacoesEditaveis(processo.status);
   const metodo = processo.metodoPreco;
 
@@ -121,13 +127,44 @@ export function ProcessoEditor({
 
   const salvarLote = async () => {
     setSalvando(true);
-    const ok = await chamar(
-      `/api/processos/${encodeURIComponent(processo.id)}/lote`,
-      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notas: notes, itens: items }) },
-      "Lote salvo.",
-    );
-    if (ok) setDirty(false);
-    setSalvando(false);
+    setErro("");
+    const rota = `/api/processos/${encodeURIComponent(processo.id)}/lote`;
+    const enviar = (justificativaQuantidades?: string) =>
+      fetch(rota, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notas: notes, itens: items, justificativaQuantidades }),
+      });
+
+    try {
+      let resposta = await enviar();
+      // 422 significa que o servidor detectou alteracao em numero de secretaria
+      // e esta cobrando o motivo. Quem lista o que mudou e ele, nao a tela.
+      if (resposta.status === 422) {
+        const cobranca = await resposta.json().catch(() => ({}));
+        const motivo = window.prompt(
+          `Voce esta alterando quantidade lancada por outra secretaria:\n${cobranca.resumo}\n\n` +
+            "Descreva o motivo (minimo 10 caracteres). Ele fica registrado no processo:",
+        );
+        if (!motivo?.trim()) {
+          setErro("Ajuste cancelado: alterar quantidade de outra secretaria exige justificativa.");
+          setSalvando(false);
+          return;
+        }
+        resposta = await enviar(motivo.trim());
+      }
+      const corpo = await resposta.json().catch(() => ({}));
+      if (!resposta.ok) {
+        setErro(corpo.error || `A API respondeu ${resposta.status}.`);
+        return;
+      }
+      setAviso(corpo.ajustes ? `Lote salvo com ${corpo.ajustes} ajuste(s) registrado(s).` : "Lote salvo.");
+      setDirty(false);
+      router.refresh();
+      await sincronizarCotacoes();
+    } finally {
+      setSalvando(false);
+    }
   };
 
   /**
@@ -274,7 +311,9 @@ export function ProcessoEditor({
           ) : compras ? (
             <span>Voce conduz o processo como <strong>Setor de Compras</strong>. Nesta fase da para editar {[
               podeEstrutura && "os itens", podeQuantidade && "as quantidades", podeCotacao && "as cotacoes",
-            ].filter(Boolean).join(", ")}.</span>
+            ].filter(Boolean).join(", ")}.{compras && podeQuantidade && ajusteExigeJustificativa(processo.status)
+              ? " Alterar um numero lancado por uma secretaria pede justificativa, que fica registrada no processo."
+              : ""}</span>
           ) : (
             <span>Voce lanca as quantidades da <strong>Secretaria de {nomeCurtoSecretaria(secretarias, minhaSecretaria)}</strong>. As demais colunas e as cotacoes ficam bloqueadas.</span>
           )}

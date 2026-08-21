@@ -1,6 +1,6 @@
 import { podeEditarLote, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { estruturaEditavel, quantidadesEditaveis, statusDescricoes, type LoteItem, type Secretaria } from "@/lib/compras";
+import { ajusteDeQuantidadePermitido, ajusteExigeJustificativa, diferencasDeQuantidade, estruturaEditavel, quantidadesEditaveis, statusDescricoes, type LoteItem, type Secretaria } from "@/lib/compras";
 import { lerProcesso, salvarLote } from "@/lib/repositorio/processos";
 import { listarSecretarias } from "@/lib/repositorio/secretarias";
 import { NextResponse } from "next/server";
@@ -61,7 +61,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ nume
     const enviado = corpo as { notas: string; itens: LoteItem[] };
     const compras = podeEditarTodasAsColunas(sessao.papel);
     const podeEstrutura = compras && estruturaEditavel(atual.status);
-    const podeQuantidade = quantidadesEditaveis(atual.status);
+    // Compras tambem corrige quantidade durante a cotacao; secretaria, so ate a coleta.
+    const podeQuantidade = compras ? ajusteDeQuantidadePermitido(atual.status) : quantidadesEditaveis(atual.status);
 
     if (!podeQuantidade && !podeEstrutura) {
       return NextResponse.json(
@@ -106,11 +107,36 @@ export async function PUT(request: Request, { params }: { params: Promise<{ nume
       return { ...referencia, quantidades };
     });
 
+    // Quando o Setor de Compras mexe num numero lancado por uma secretaria, o
+    // que muda precisa vir com motivo — e fica registrado item a item.
+    let ajustes = null;
+    if (compras && !podeEstrutura) {
+      const mudancas = diferencasDeQuantidade(atual.itens, itens, colunasLiberadas);
+      if (mudancas.length) {
+        const justificativa = String((corpo as { justificativaQuantidades?: unknown }).justificativaQuantidades ?? "").trim();
+        if (ajusteExigeJustificativa(atual.status) && justificativa.length < 10) {
+          const resumo = mudancas
+            .slice(0, 5)
+            .map((mudanca) => `item ${mudanca.item}/${mudanca.secretaria}: ${mudanca.anterior} para ${mudanca.nova}`)
+            .join("; ");
+          return NextResponse.json(
+            {
+              error: "Alterar quantidade lancada por uma secretaria exige justificativa de ao menos 10 caracteres.",
+              mudancas,
+              resumo,
+            },
+            { status: 422 },
+          );
+        }
+        if (justificativa) ajustes = { justificativa, mudancas };
+      }
+    }
+
     // As notas do processo pertencem ao Setor de Compras.
     const notas = compras ? enviado.notas : atual.notas;
-    const gravou = await salvarLote(sessao.prefeituraId, numero, { notas, itens }, sessao.id || null);
+    const gravou = await salvarLote(sessao.prefeituraId, numero, { notas, itens }, sessao.id || null, ajustes);
     if (!gravou) return NextResponse.json({ error: `Processo ${numero} nao encontrado.` }, { status: 404 });
-    return NextResponse.json({ ok: true, itens: itens.length });
+    return NextResponse.json({ ok: true, itens: itens.length, ajustes: ajustes?.mudancas.length ?? 0 });
   } catch (erro) {
     return NextResponse.json({ error: (erro as Error).message }, { status: 500 });
   }

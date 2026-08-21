@@ -175,6 +175,37 @@ export function ExportLicitacaoPDF({
         cursorY = ((pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || cursorY) + 10;
       }
 
+      // ---------- ajustes de quantidade ----------
+      const ajustes = items.flatMap((item) =>
+        (item.ajustes ?? []).map((ajuste) => [
+          String(item.item),
+          ajuste.secretaria,
+          `${ajuste.anterior} para ${ajuste.nova}`,
+          ajuste.justificativa,
+          `${ajuste.usuario ?? "-"} · ${ajuste.quando}`,
+        ]),
+      );
+
+      if (ajustes.length) {
+        if (cursorY > 150) {
+          pdf.addPage();
+          cursorY = 20;
+        }
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(10);
+        pdf.text("AJUSTES DE QUANTIDADE", margem, cursorY);
+        autoTable(pdf, {
+          startY: cursorY + 4,
+          head: [["Item", "Secretaria", "Alteracao", "Justificativa", "Responsavel"]],
+          body: ajustes,
+          styles: { fontSize: 7, cellPadding: 2 },
+          headStyles: { fillColor: [90, 90, 96] },
+          alternateRowStyles: { fillColor: [248, 248, 248] },
+          columnStyles: { 3: { cellWidth: 90 } },
+        });
+        cursorY = ((pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || cursorY) + 10;
+      }
+
       // ---------- metodologia e assinatura ----------
       if (cursorY > 165) {
         pdf.addPage();

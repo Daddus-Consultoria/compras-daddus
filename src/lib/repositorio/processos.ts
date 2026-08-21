@@ -1,4 +1,4 @@
-import type { Cotacao, LoteItem, MetodoPreco, Processo, ProcessoStatus, Secretaria } from "@/lib/compras";
+import type { AjusteQuantidade, Cotacao, LoteItem, MetodoPreco, Processo, ProcessoStatus, Secretaria } from "@/lib/compras";
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
 
 type LinhaProcesso = {
@@ -22,6 +22,7 @@ type LinhaItem = {
   unidade: string;
   quantidades: Record<string, number>;
   cotacoes: Cotacao[];
+  ajustes: AjusteQuantidade[];
 };
 
 // As datas sao formatadas no proprio Postgres para nao dependerem do fuso do servidor.
@@ -49,7 +50,19 @@ const selecaoItens = `
                      'desconsiderada', c.desconsiderada,
                      'justificativa', c.justificativa)
                      order by c.desconsiderada, c.valor_unitario)
-                   from cotacoes c where c.item_id = i.id), '[]'::jsonb) as cotacoes
+                   from cotacoes c where c.item_id = i.id), '[]'::jsonb) as cotacoes,
+         coalesce((select jsonb_agg(jsonb_build_object(
+                     'secretaria', s.nome,
+                     'anterior', a.quantidade_anterior,
+                     'nova', a.quantidade_nova,
+                     'justificativa', a.justificativa,
+                     'usuario', u.nome,
+                     'quando', to_char(a.criado_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI'))
+                     order by a.criado_em desc)
+                   from ajustes_quantidade a
+                   join secretarias s on s.id = a.secretaria_id
+                   left join usuarios u on u.id = a.usuario_id
+                   where a.item_id = i.id), '[]'::jsonb) as ajustes
   from itens_lote i
   where i.processo_id = any($1::int[])
   order by i.numero_item`;
@@ -65,6 +78,7 @@ function paraItem(linha: LinhaItem, chaves: string[]): LoteItem {
     valorUnitario: Number(cotacao.valorUnitario),
   }));
   return {
+    ajustes: linha.ajustes ?? [],
     id: `${linha.processo_id}-${linha.numero_item}`,
     item: linha.numero_item,
     especificacao: linha.especificacao,
@@ -126,11 +140,14 @@ export async function lerProcesso(prefeituraId: number, numero: string) {
  * reconciliacao acontece por numero_item, para nao depender de ids temporarios
  * de itens criados na tela.
  */
+export type AjusteRegistrado = { item: number; secretaria: string; anterior: number; nova: number };
+
 export async function salvarLote(
   prefeituraId: number,
   numero: string,
   dados: { notas: string; itens: LoteItem[] },
   autorId: number | null = null,
+  ajustes: { justificativa: string; mudancas: AjusteRegistrado[] } | null = null,
 ) {
   return emTransacao(async (executar) => {
     // O filtro por prefeitura no proprio UPDATE e o que impede uma prefeitura
@@ -168,6 +185,18 @@ export async function salvarLote(
         );
       }
 
+    }
+    // O ajuste e gravado depois das quantidades, ja com os ids definitivos.
+    if (ajustes?.mudancas.length) {
+      for (const mudanca of ajustes.mudancas) {
+        await executar(
+          `insert into ajustes_quantidade (item_id, secretaria_id, quantidade_anterior, quantidade_nova, justificativa, usuario_id)
+           select i.id, s.id, $3, $4, $5, $6
+           from itens_lote i, secretarias s
+           where i.processo_id = $1 and i.numero_item = $2 and s.prefeitura_id = $7 and s.chave = $8`,
+          [processo.id, mudanca.item, mudanca.anterior, mudanca.nova, ajustes.justificativa, autorId, prefeituraId, mudanca.secretaria],
+        );
+      }
     }
     return true;
   });

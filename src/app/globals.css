@@ -97,3 +97,11 @@ button { font: inherit; }
 .daddus-nova-cotacao input, .daddus-nova-cotacao select { border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 11px; outline-color: var(--primary); padding: 7px 8px; }
 .daddus-nova-cotacao input[name="valorUnitario"] { width: 110px; }
 .daddus-nova-cotacao input[name="dataCotacao"] { width: 105px; }
+
+.daddus-ajustes { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
+.daddus-ajustes > strong { display: block; font-size: 11px; margin-bottom: 8px; }
+.daddus-ajustes ul { display: flex; flex-direction: column; gap: 8px; }
+.daddus-ajustes li { align-items: baseline; display: flex; flex-wrap: wrap; font-size: 10px; gap: 8px; }
+.daddus-ajustes li b { color: var(--primary); }
+.daddus-ajustes li em { color: #45454c; font-style: normal; }
+.daddus-ajustes li small { color: var(--muted); font-size: 9px; }
