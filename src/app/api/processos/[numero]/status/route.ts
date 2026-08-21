@@ -1,6 +1,6 @@
 import { podeEditarTodasAsColunas, podeOperarCpl } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { metodoLabels, podeMoverParaFase, processoStatusLabels, transicoesDeStatus, type MetodoPreco, type ProcessoStatus } from "@/lib/compras";
+import { metodoLabels, money, podeMoverParaFase, processoStatusLabels, transicoesDeStatus, type MetodoPreco, type ProcessoStatus } from "@/lib/compras";
 import { alterarStatus, definirMetodo, lerProcesso } from "@/lib/repositorio/processos";
 import { NextResponse } from "next/server";
 
@@ -58,7 +58,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ nu
             { status: 403 },
           );
         }
-        await alterarStatus(sessao.prefeituraId, numero, novo, sessao.id || null, String(corpo.observacao ?? "").trim());
+        const movido = await alterarStatus(sessao.prefeituraId, numero, novo, sessao.id || null, String(corpo.observacao ?? "").trim());
+        if ("erro" in movido && movido.erro === "contrato-ativo") {
+          return NextResponse.json(
+            {
+              error: `O contrato ${movido.contrato} ainda esta ativo, com ${money(movido.saldo ?? 0)} de saldo a consumir. `
+                + `Encerre o contrato antes de ${novo === "cancelado" ? "cancelar" : "encerrar"} o processo.`,
+              contrato: movido.contrato,
+            },
+            { status: 409 },
+          );
+        }
+        if ("erro" in movido) {
+          return NextResponse.json({ error: `Processo ${numero} nao encontrado.` }, { status: 404 });
+        }
       }
     }
 

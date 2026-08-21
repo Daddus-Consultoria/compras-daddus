@@ -113,7 +113,7 @@ export type DadosNovoContrato = DadosContrato & {
 
 /**
  * Cadastra o contrato que voltou da CPL. Quando ele nasce de um processo que
- * estava em "Contrato recebido", o proprio cadastro leva o processo para
+ * estava em "Devolvido pela CPL", o proprio cadastro leva o processo para
  * "Contrato ativo": e o cadastro que atesta o fato, e nao um clique a parte.
  */
 export async function criarContrato(prefeituraId: number, usuarioId: number | null, dados: DadosNovoContrato) {

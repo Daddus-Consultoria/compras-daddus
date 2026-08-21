@@ -80,7 +80,7 @@ export function ProcessoEditor({
       ? `A fase "${processoStatusLabels[processo.status]}" nao aceita novas cotacoes. ${statusDescricoes[processo.status]}`
       : "Somente o Setor de Compras lanca cotacoes neste processo.";
   const podeIrParaCotacao = compras && !podeCotacao && transicoesDeStatus[processo.status].includes("em_cotacao");
-  // "Em processamento na CPL" e "Contrato recebido" nao viram botao aqui: quem
+  // "Em processamento na CPL" e "Devolvido pela CPL" nao viram botao aqui: quem
   // as registra e a propria comissao, na tramitacao do processo.
   const fasesDeCompras = transicoesDeStatus[processo.status].filter((fase) => podeMoverParaFase("compras", fase));
 
