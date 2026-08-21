@@ -455,24 +455,3 @@ export function toNumericValue(value: string) {
 export function money(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
-
-/** Guarda a agenda pessoal do comprador, que e local a cada navegador. */
-export function loadRascunho<T>(key: string): T | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveRascunho<T>(key: string, value: T) {
-  if (typeof window === "undefined") return false;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch {
-    return false;
-  }
-}

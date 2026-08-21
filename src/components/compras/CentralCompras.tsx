@@ -1,21 +1,18 @@
 "use client";
 
+import { AgendaPessoal } from "@/components/compras/AgendaPessoal";
 import { AppShell } from "@/components/compras/AppShell";
 import { podeAbrirSolicitacao } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
-import { loadRascunho, loteTotal, money, nomeSecretaria, processoStatusLabels, saveRascunho, statusTone, type Processo, type SecretariaInfo } from "@/lib/compras";
+import { cotacoesValidas, loteTotal, minimoDeCotacoes, money, nomeSecretaria, processoStatusLabels, statusTone, type Processo, type SecretariaInfo } from "@/lib/compras";
 import { ArrowUpRight, BellRing, CalendarClock, CheckCircle2, ClipboardList, FileText, Plus, Search, Timer } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-type AgendaRascunho = { nota: string; concluidas: string[] };
-
-const agendaKey = "daddus-compras:agenda";
-const tarefas = [
-  { id: "cotacoes", title: "Revisar cotacoes do PE 2026-0142", date: "Hoje, 16:00" },
-  { id: "fornecedor", title: "Solicitar proposta ao fornecedor", date: "Amanha, 10:30" },
-  { id: "termo", title: "Conferir termo de referencia", date: "28 ago" },
-];
+/** Itens do lote que ainda nao alcancaram o minimo de precos da IN 65/2021. */
+function itensSemPreco(processo: Processo) {
+  return processo.itens.filter((item) => cotacoesValidas(item).length < minimoDeCotacoes).length;
+}
 
 /** "28/08/2026" -> data comparavel, sem depender do fuso do navegador. */
 function parseDataBr(valor: string) {
@@ -27,9 +24,6 @@ function parseDataBr(valor: string) {
 export function CentralCompras({ processos, sessao, secretarias }: { processos: Processo[]; sessao: Sessao; secretarias: SecretariaInfo[] }) {
   const [busca, setBusca] = useState("");
   const [solicitacoes, setSolicitacoes] = useState<unknown[]>([]);
-  const [nota, setNota] = useState("");
-  const [concluidas, setConcluidas] = useState<string[]>([]);
-  const [notaSalva, setNotaSalva] = useState(false);
 
   useEffect(() => {
     fetch("/api/solicitacoes", { cache: "no-store" })
@@ -37,20 +31,6 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
       .then((dados) => setSolicitacoes(Array.isArray(dados) ? dados : []))
       .catch(() => setSolicitacoes([]));
   }, []);
-
-  useEffect(() => {
-    const rascunho = loadRascunho<AgendaRascunho>(agendaKey);
-    if (!rascunho) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage so existe no cliente; ler no efeito evita divergencia de hidratacao
-    setNota(rascunho.nota || "");
-    setConcluidas(rascunho.concluidas || []);
-  }, []);
-
-  useEffect(() => {
-    if (!notaSalva) return;
-    const timer = setTimeout(() => setNotaSalva(false), 3000);
-    return () => clearTimeout(timer);
-  }, [notaSalva]);
 
   const processosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -64,18 +44,6 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
   const emCotacao = processos.filter((processo) => processo.status === "em_cotacao").length;
   const valorEstimado = processos.reduce((total, processo) => total + loteTotal(processo.itens, processo.metodoPreco), 0);
   const proximoPrazo = [...processos].sort((a, b) => parseDataBr(a.prazoLimite) - parseDataBr(b.prazoLimite))[0];
-
-  const alternarTarefa = (id: string) => {
-    setConcluidas((current) => {
-      const proximas = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      saveRascunho<AgendaRascunho>(agendaKey, { nota, concluidas: proximas });
-      return proximas;
-    });
-  };
-
-  const salvarNota = () => {
-    setNotaSalva(saveRascunho<AgendaRascunho>(agendaKey, { nota, concluidas }));
-  };
 
   return (
     <AppShell sessao={sessao}>
@@ -123,7 +91,7 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
           <div className="daddus-table-wrap">
             <table className="daddus-table">
               <thead>
-                <tr><th>Nº Processo</th><th>Objeto</th><th>Prazo limite</th><th>Status</th><th>Acoes</th></tr>
+                <tr><th>Nº Processo</th><th>Objeto</th><th>Prazo limite</th><th>Status</th><th>Cotacoes</th><th>Acoes</th></tr>
               </thead>
               <tbody>
                 {processosFiltrados.map((processo) => (
@@ -132,40 +100,28 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
                     <td>{processo.objeto}</td>
                     <td><span className="deadline"><CalendarClock size={14} /> {processo.prazoLimite}</span></td>
                     <td><span className={`daddus-status ${statusTone(processo.status)}`}>{processoStatusLabels[processo.status]}</span></td>
+                    <td>
+                      {itensSemPreco(processo) > 0 ? (
+                        <Link href={`/painel/compras/processo/${processo.id}`} className="daddus-row-action pendente">
+                          {itensSemPreco(processo)} {itensSemPreco(processo) === 1 ? "item sem preco" : "itens sem preco"}
+                        </Link>
+                      ) : (
+                        <span className="daddus-status gray">{processo.itens.length ? "precos completos" : "lote vazio"}</span>
+                      )}
+                    </td>
                     <td><Link href={`/painel/compras/processo/${processo.id}`} className="daddus-row-action">Abrir <ArrowUpRight size={14} /></Link></td>
                   </tr>
                 ))}
                 {!processosFiltrados.length && (
-                  <tr><td colSpan={5} className="daddus-empty">{processos.length ? `Nenhum processo encontrado para “${busca}”.` : "Nenhum processo cadastrado."}</td></tr>
+                  <tr><td colSpan={6} className="daddus-empty">{processos.length ? `Nenhum processo encontrado para “${busca}”.` : "Nenhum processo cadastrado."}</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </section>
 
-        <section className="daddus-task-card">
-          <div className="daddus-card-heading">
-            <div>
-              <span className="daddus-overline">Minha agenda</span>
-              <h3>Tarefas pessoais</h3>
-            </div>
-          </div>
-          {tarefas.map((tarefa) => (
-            <div className="daddus-task" key={tarefa.id}>
-              <input type="checkbox" checked={concluidas.includes(tarefa.id)} onChange={() => alternarTarefa(tarefa.id)} aria-label={tarefa.title} />
-              <div>
-                <strong>{tarefa.title}</strong>
-                <span><CalendarClock size={12} /> {tarefa.date}</span>
-              </div>
-            </div>
-          ))}
-          <label className="daddus-notes">
-            <span>Comentarios / notas do processo</span>
-            <textarea value={nota} onChange={(event) => setNota(event.target.value)} placeholder="Registre um acompanhamento interno..." />
-          </label>
-          {notaSalva && <span className="daddus-success"><CheckCircle2 size={15} /> Nota salva</span>}
-          <button className="daddus-secondary-button" type="button" onClick={salvarNota}>Salvar nota</button>
-        </section>
+        <AgendaPessoal processos={processos} />
+
       </div>
     </AppShell>
   );

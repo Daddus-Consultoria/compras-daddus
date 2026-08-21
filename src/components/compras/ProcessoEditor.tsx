@@ -70,6 +70,13 @@ export function ProcessoEditor({
     : podeEditarLote(sessao.papel) && quantidadesEditaveis(processo.status);
   const podeCotacao = compras && cotacoesEditaveis(processo.status);
   const metodo = processo.metodoPreco;
+  // Sem isso o formulario de cotacao simplesmente sumia, e a tela parecia quebrada.
+  const motivoSemCotacao = podeCotacao
+    ? undefined
+    : compras
+      ? `A fase "${processoStatusLabels[processo.status]}" nao aceita novas cotacoes. ${statusDescricoes[processo.status]}`
+      : "Somente o Setor de Compras lanca cotacoes neste processo.";
+  const podeIrParaCotacao = compras && !podeCotacao && transicoesDeStatus[processo.status].includes("em_cotacao");
 
   const colunaEditavel = (chave: Secretaria) => {
     const secretaria = secretarias.find((opcao) => opcao.chave === chave);
@@ -388,7 +395,15 @@ export function ProcessoEditor({
                     {aberto && (
                       <tr className="linha-cotacoes">
                         <td colSpan={secretarias.length + 8}>
-                          <PainelCotacoes item={item} editavel={podeCotacao} aoCriar={criarCotacao} aoAlterar={alterarCotacao} aoRemover={removerCotacao} />
+                          <PainelCotacoes
+                            item={item}
+                            editavel={podeCotacao}
+                            motivoBloqueio={motivoSemCotacao}
+                            aoLiberar={podeIrParaCotacao ? { rotulo: "Mover para Em cotacao", acao: () => mudarFase("em_cotacao") } : undefined}
+                            aoCriar={criarCotacao}
+                            aoAlterar={alterarCotacao}
+                            aoRemover={removerCotacao}
+                          />
                         </td>
                       </tr>
                     )}

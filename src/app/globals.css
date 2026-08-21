@@ -105,3 +105,38 @@ button { font: inherit; }
 .daddus-ajustes li b { color: var(--primary); }
 .daddus-ajustes li em { color: #45454c; font-style: normal; }
 .daddus-ajustes li small { color: var(--muted); font-size: 9px; }
+
+.daddus-sino { position: relative; }
+.daddus-sino-caixa { background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 12px 32px rgba(24, 24, 27, .14); max-height: 70vh; overflow-y: auto; position: absolute; right: 0; top: 32px; width: 340px; z-index: 40; }
+.daddus-sino-caixa header { align-items: center; border-bottom: 1px solid var(--line); display: flex; gap: 10px; justify-content: space-between; padding: 13px 15px; position: sticky; top: 0; background: #fff; }
+.daddus-sino-caixa header strong { font-size: 12px; }
+.daddus-sino-caixa header button { align-items: center; color: var(--primary); cursor: pointer; display: flex; font-size: 10px; font-weight: 600; gap: 4px; }
+.daddus-sino-caixa li { border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
+.daddus-sino-caixa li.alerta { border-left-color: var(--primary); }
+.daddus-sino-caixa li.aviso { border-left-color: var(--yellow); }
+.daddus-sino-caixa li.lida { opacity: .55; }
+.daddus-sino-caixa li a { display: block; padding: 12px 15px; }
+.daddus-sino-caixa li a:hover { background: #fafafa; }
+.daddus-sino-caixa li strong { color: #303036; display: block; font-size: 11px; font-weight: 600; }
+.daddus-sino-caixa li span { color: #55555d; display: block; font-size: 10px; margin-top: 4px; }
+.daddus-sino-caixa li small { color: var(--muted); display: block; font-size: 9px; margin-top: 5px; }
+.daddus-sino-vazio, .daddus-sino-rodape { color: var(--muted); font-size: 10px; padding: 15px; }
+.daddus-sino-rodape { border-top: 1px solid var(--line); }
+.daddus-sino-vazio { align-items: center; display: flex; gap: 7px; }
+.daddus-girando { animation: daddus-girar 1s linear infinite; }
+@keyframes daddus-girar { to { transform: rotate(360deg); } }
+
+.daddus-task.concluida strong { color: var(--muted); text-decoration: line-through; }
+.daddus-task > div { flex: 1; min-width: 0; }
+.daddus-task span.atrasada { color: var(--primary); font-weight: 600; }
+.daddus-task-processo { color: var(--primary); font-weight: 600; margin-left: 6px; }
+.daddus-task .table-icon-button { opacity: 0; transition: opacity .15s; }
+.daddus-task:hover .table-icon-button, .daddus-task .table-icon-button:focus-visible { opacity: 1; }
+.daddus-agenda-vazia { align-items: center; color: var(--muted); display: flex; font-size: 10px; gap: 7px; margin: 0 18px; padding: 16px 0; }
+.daddus-nova-tarefa { border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; margin: 0 18px; padding-top: 14px; }
+.daddus-nova-tarefa > div { display: flex; gap: 8px; }
+.daddus-nova-tarefa input, .daddus-nova-tarefa select { border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 10px; min-width: 0; outline-color: var(--primary); padding: 8px 9px; }
+.daddus-nova-tarefa input[name="descricao"] { width: 100%; }
+.daddus-nova-tarefa > div input, .daddus-nova-tarefa > div select { flex: 1; }
+.daddus-nova-tarefa .daddus-secondary-button { flex-shrink: 0; padding: 8px 11px; }
+.daddus-inline-warning.agenda { margin: 12px 18px 0; }
