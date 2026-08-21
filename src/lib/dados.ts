@@ -2,7 +2,11 @@ import { demoProcessos, findProcesso, secretariasDemo } from "@/lib/compras";
 import { modoDemonstracao } from "@/lib/auth/sessao";
 import { acharContratoDemo, contratosDemo } from "@/lib/contratos";
 import { lerContrato, listarContratos } from "@/lib/repositorio/contratos";
+import { acharDfdDemo, dfdsDemo } from "@/lib/dfd";
+import { etpVazio } from "@/lib/etp";
 import { pedidosDemo, saldoDemo, totalContratado, totalExecutado } from "@/lib/pedidos";
+import { dfdDoProcesso, lerDfd, listarDfds } from "@/lib/repositorio/dfd";
+import { lerEtp, situacaoDosEtps } from "@/lib/repositorio/etp";
 import { listarPedidos, resumoDeSaldos, saldoDoContrato, type ResumoSaldo } from "@/lib/repositorio/pedidos";
 import { lerProcesso, listarProcessos } from "@/lib/repositorio/processos";
 import { listarSecretarias } from "@/lib/repositorio/secretarias";
@@ -122,5 +126,62 @@ export async function obterResumoDeSaldos(prefeituraId: number | null) {
     return await resumoDeSaldos(prefeituraId);
   } catch {
     return demo();
+  }
+}
+
+/**
+ * Demandas (DFD). O secretario recebe apenas as da propria secretaria, com o
+ * recorte feito no servidor — a mesma regra dos pedidos e das solicitacoes.
+ */
+export async function obterDfds(prefeituraId: number | null, secretaria: string | null = null) {
+  const demo = () => (secretaria ? dfdsDemo.filter((dfd) => dfd.secretaria === secretaria) : dfdsDemo);
+  if (modoDemonstracao() || prefeituraId === null) return demo();
+  try {
+    const secretariaId = secretaria
+      ? (await listarSecretarias(prefeituraId)).find((opcao) => opcao.chave === secretaria)?.id ?? -1
+      : null;
+    return await listarDfds(prefeituraId, secretariaId);
+  } catch {
+    return demo();
+  }
+}
+
+export async function obterDfd(prefeituraId: number | null, numero: string) {
+  if (modoDemonstracao() || prefeituraId === null) return acharDfdDemo(numero);
+  try {
+    return await lerDfd(prefeituraId, numero);
+  } catch {
+    return acharDfdDemo(numero);
+  }
+}
+
+/** A demanda que originou o processo; e dela que sai o inciso I do ETP. */
+export async function obterDfdDoProcesso(prefeituraId: number | null, numeroProcesso: string) {
+  if (modoDemonstracao() || prefeituraId === null) {
+    return dfdsDemo.find((dfd) => dfd.processo === numeroProcesso) ?? null;
+  }
+  try {
+    return await dfdDoProcesso(prefeituraId, numeroProcesso);
+  } catch {
+    return null;
+  }
+}
+
+/** Sem banco o estudo abre vazio: da para ver a estrutura, nao para gravar. */
+export async function obterEtp(prefeituraId: number | null, numeroProcesso: string) {
+  if (modoDemonstracao() || prefeituraId === null) return etpVazio(numeroProcesso);
+  try {
+    return (await lerEtp(prefeituraId, numeroProcesso)) ?? etpVazio(numeroProcesso);
+  } catch {
+    return etpVazio(numeroProcesso);
+  }
+}
+
+export async function obterSituacaoDosEtps(prefeituraId: number | null) {
+  if (modoDemonstracao() || prefeituraId === null) return [];
+  try {
+    return await situacaoDosEtps(prefeituraId);
+  } catch {
+    return [];
   }
 }

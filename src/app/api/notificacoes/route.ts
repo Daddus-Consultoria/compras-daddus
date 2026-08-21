@@ -1,5 +1,5 @@
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { obterContratos, obterPedidos, obterProcessos } from "@/lib/dados";
+import { obterContratos, obterPedidos, obterProcessos, obterSituacaoDosEtps } from "@/lib/dados";
 import { montarNotificacoes } from "@/lib/notificacoes";
 import { esquecerNotificacoes, lerNotificacoesLidas, marcarNotificacoesLidas } from "@/lib/repositorio/notificacoes";
 import { listarSolicitacoes } from "@/lib/repositorio/solicitacoes";
@@ -12,11 +12,12 @@ export async function GET() {
 
   const semBanco = modoDemonstracao() || !sessao.id || sessao.prefeituraId === null;
   try {
-    const [{ processos }, { contratos }, { pedidos }] = await Promise.all([
+    const [{ processos }, { contratos }, { pedidos }, etps] = await Promise.all([
       obterProcessos(sessao.prefeituraId),
       obterContratos(sessao.prefeituraId),
       // O secretario so e avisado do que a propria secretaria pediu.
       obterPedidos(sessao.prefeituraId, { secretaria: sessao.papel === "secretario" ? sessao.secretariaChave : null }),
+      obterSituacaoDosEtps(sessao.prefeituraId),
     ]);
     // Sem banco o sino continua util: mostra os avisos dos dados de exemplo,
     // apenas sem guardar o que ja foi lido.
@@ -36,6 +37,7 @@ export async function GET() {
       tarefas,
       pedidos,
       contratos,
+      etps,
       lidas,
     });
 

@@ -13,7 +13,9 @@ import {
   type Processo,
   type SecretariaInfo,
 } from "@/lib/compras";
-import { ArrowUpRight, CalendarClock, FileCheck2, Inbox, Stamp } from "lucide-react";
+import type { EtpStatus } from "@/lib/etp";
+import { etpStatusLabels } from "@/lib/etp";
+import { ArrowUpRight, CalendarClock, FileCheck2, FileSearch, FileText, Inbox, Stamp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -22,7 +24,18 @@ import { useState } from "react";
  * viraram contrato cadastrado. Cada linha abre a tramitacao do processo, que e
  * onde a CPL registra o que fez — e o registro e que move a fase.
  */
-export function FilaCpl({ processos, sessao, secretarias }: { processos: Processo[]; sessao: Sessao; secretarias: SecretariaInfo[] }) {
+export function FilaCpl({
+  processos,
+  sessao,
+  secretarias,
+  documentos,
+}: {
+  processos: Processo[];
+  sessao: Sessao;
+  secretarias: SecretariaInfo[];
+  /** DFD de origem e situacao do ETP de cada processo, para a comissao baixar e anexar. */
+  documentos: Record<string, { dfd: string | null; etp: EtpStatus | null }>;
+}) {
   const [aberto, setAberto] = useState<string | null>(processos[0]?.id ?? null);
 
   const aguardando = processos.filter((processo) => processo.status === "enviado_licitacao");
@@ -58,7 +71,7 @@ export function FilaCpl({ processos, sessao, secretarias }: { processos: Process
         <div className="daddus-table-wrap">
           <table className="daddus-table">
             <thead>
-              <tr><th>Processo</th><th>Objeto</th><th>Secretaria</th><th>Prazo</th><th>Valor de referencia</th><th>Fase</th><th></th></tr>
+              <tr><th>Processo</th><th>Objeto</th><th>Secretaria</th><th>Prazo</th><th>Valor de referencia</th><th>Documentos</th><th>Fase</th><th></th></tr>
             </thead>
             <tbody>
               {processos.map((processo) => (
@@ -68,6 +81,23 @@ export function FilaCpl({ processos, sessao, secretarias }: { processos: Process
                   <td>{nomeSecretaria(secretarias, processo.secretariaSolicitante)}</td>
                   <td><span className="deadline"><CalendarClock size={14} /> {processo.prazoLimite}</span></td>
                   <td>{money(loteTotal(processo.itens, processo.metodoPreco))}</td>
+                  <td>
+                    <div className="daddus-linha-acoes">
+                      {documentos[processo.id]?.dfd && (
+                        <Link href={`/painel/compras/dfd/${encodeURIComponent(documentos[processo.id]!.dfd!)}`} className="daddus-row-action">
+                          <FileText size={13} /> DFD {documentos[processo.id]!.dfd}
+                        </Link>
+                      )}
+                      <Link href={`/painel/compras/etp/${encodeURIComponent(processo.id)}`} className="daddus-row-action">
+                        <FileSearch size={13} /> ETP
+                      </Link>
+                    </div>
+                    <small>
+                      {documentos[processo.id]?.etp
+                        ? etpStatusLabels[documentos[processo.id]!.etp!].toLowerCase()
+                        : "estudo nao iniciado"}
+                    </small>
+                  </td>
                   <td><span className={`daddus-status ${statusTone(processo.status)}`}>{processoStatusLabels[processo.status]}</span></td>
                   <td>
                     <button type="button" className="daddus-row-action" onClick={() => setAberto(processo.id === aberto ? null : processo.id)}>
@@ -77,7 +107,7 @@ export function FilaCpl({ processos, sessao, secretarias }: { processos: Process
                 </tr>
               ))}
               {!processos.length && (
-                <tr><td colSpan={7} className="daddus-empty">Nenhum processo aguardando a comissao.</td></tr>
+                <tr><td colSpan={8} className="daddus-empty">Nenhum processo aguardando a comissao.</td></tr>
               )}
             </tbody>
           </table>

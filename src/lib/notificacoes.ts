@@ -2,6 +2,7 @@ import type { Papel } from "@/lib/auth/papeis";
 import { cotacoesValidas, minimoDeCotacoes, money, processoStatusLabels, quantidadeDe, type Processo, type Secretaria } from "@/lib/compras";
 import type { Contrato } from "@/lib/contratos";
 import { diasParaVencer } from "@/lib/contratos";
+import type { EtpStatus } from "@/lib/etp";
 import { valorDoPedido, type Pedido } from "@/lib/pedidos";
 import type { Solicitacao } from "@/lib/repositorio/solicitacoes";
 import type { Tarefa } from "@/lib/repositorio/tarefas";
@@ -65,6 +66,7 @@ export function montarNotificacoes(dados: {
   tarefas: Tarefa[];
   pedidos: Pedido[];
   contratos: Contrato[];
+  etps: Array<{ processo: string; status: EtpStatus }>;
   lidas: Set<string>;
   hoje?: Date;
 }): Notificacao[] {
@@ -127,6 +129,26 @@ export function montarNotificacoes(dados: {
         href: `/painel/compras/processo/${processo.id}`,
         tom: "aviso",
         quando: processo.prazoLimite,
+      });
+    }
+  }
+
+  // O ETP instrui a fase externa: mandar o mapa a comissao sem o estudo
+  // concluido e o tipo de falha que so aparece quando o processo ja esta la.
+  if (ehCompras) {
+    for (const processo of dados.processos) {
+      if (processo.status !== "mapa_elaborado" && processo.status !== "enviado_licitacao") continue;
+      const estudo = dados.etps.find((etp) => etp.processo === processo.id);
+      if (estudo?.status === "concluido") continue;
+      avisos.push({
+        chave: `etp:${processo.id}`,
+        titulo: `PE ${processo.id} caminha para a CPL sem ETP concluido`,
+        detalhe: estudo
+          ? "O estudo tecnico esta em elaboracao; conclua antes de a comissao receber o processo."
+          : "Nenhum estudo tecnico preliminar foi iniciado para este processo (art. 18 da Lei 14.133/2021).",
+        href: `/painel/compras/etp/${encodeURIComponent(processo.id)}`,
+        tom: "alerta",
+        quando: processoStatusLabels[processo.status],
       });
     }
   }

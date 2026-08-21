@@ -380,11 +380,39 @@ export async function criarProcesso(prefeituraId: number, usuarioId: number | nu
     // apontar para o processo: e o primeiro elo da cadeia necessidade -> compra,
     // e sem ele ninguem consegue dizer depois em que processo o pedido virou.
     if (dados.solicitacaoId) {
-      await executar(
+      const vinculada = (await executar(
         `update solicitacoes set status = 'em_cotacao'::solicitacao_status, processo_id = $3
-         where id = $1 and prefeitura_id = $2 and status = 'pendente'`,
+         where id = $1 and prefeitura_id = $2 and status = 'pendente'
+         returning id, secretaria_id`,
         [dados.solicitacaoId, prefeituraId, criado.id],
-      );
+      )) as Array<{ id: number; secretaria_id: number | null }>;
+
+      // O lote comeca com os itens que a secretaria ja quantificou no DFD: o
+      // comprador corrige a especificacao, mas nao redigita a demanda inteira.
+      if (vinculada.length) {
+        const itens = (await executar(
+          `insert into itens_lote (processo_id, numero_item, especificacao, unidade)
+           select $1, i.numero_item, i.descricao, i.unidade
+           from itens_solicitacao i where i.solicitacao_id = $2
+           order by i.numero_item
+           returning id, numero_item`,
+          [criado.id, dados.solicitacaoId],
+        )) as Array<{ id: number; numero_item: number }>;
+
+        // A coluna do lote e inteira desde a primeira migracao; a quantidade do
+        // DFD, fracionaria. O arredondamento e explicito para nao virar surpresa.
+        if (itens.length && vinculada[0].secretaria_id) {
+          await executar(
+            `insert into item_quantidades (item_id, secretaria_id, quantidade, atualizado_por_id)
+             select il.id, $3, round(i.quantidade)::int, $4
+             from itens_solicitacao i
+             join itens_lote il on il.processo_id = $1 and il.numero_item = i.numero_item
+             where i.solicitacao_id = $2 and round(i.quantidade)::int > 0
+             on conflict (item_id, secretaria_id) do nothing`,
+            [criado.id, dados.solicitacaoId, vinculada[0].secretaria_id, usuarioId],
+          );
+        }
+      }
     }
 
     return { numero: dados.numero };
