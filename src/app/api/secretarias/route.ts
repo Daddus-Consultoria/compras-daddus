@@ -4,12 +4,18 @@ import { secretariasDemo } from "@/lib/compras";
 import { criarSecretaria, definirAtivaSecretaria, listarSecretarias, removerSecretaria, renomearSecretaria, usoDaSecretaria } from "@/lib/repositorio/secretarias";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   const sessao = await obterSessao();
   if (!sessao) return NextResponse.json({ error: "Sessao nao encontrada." }, { status: 401 });
-  if (modoDemonstracao() || !sessao.prefeituraId) return NextResponse.json(secretariasDemo);
+
+  // O superadmin nao tem prefeitura propria: para cadastrar um secretario ele
+  // precisa enxergar as secretarias do municipio que esta administrando.
+  const pedida = Number(new URL(request.url).searchParams.get("prefeitura"));
+  const prefeituraId = sessao.papel === "superadmin" && Number.isInteger(pedida) && pedida > 0 ? pedida : sessao.prefeituraId;
+
+  if (modoDemonstracao() || !prefeituraId) return NextResponse.json(secretariasDemo);
   try {
-    return NextResponse.json(await listarSecretarias(sessao.prefeituraId));
+    return NextResponse.json(await listarSecretarias(prefeituraId));
   } catch (erro) {
     return NextResponse.json({ error: (erro as Error).message }, { status: 500 });
   }

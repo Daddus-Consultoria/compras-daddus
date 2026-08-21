@@ -282,10 +282,27 @@ compras mexam na mesma coisa ao mesmo tempo.
 | Mapa elaborado | Mapa pronto, aguardando o envio a comissao |
 | Mapa enviado a CPL | Somente leitura ate a comissao registrar o recebimento |
 | Em processamento na CPL | A CPL conduz a licitacao e registra a tramitacao |
-| Contrato recebido | A CPL devolveu o contrato; falta o Setor de Compras cadastra-lo |
+| Devolvido pela CPL | Havendo contratacao, falta cadastrar o contrato; nao havendo, cancelar ou devolver a comissao |
 | Contrato ativo | Contrato cadastrado e em vigencia, gerando saldo para as secretarias |
 | Encerrado | Contrato executado ou vencido; nao ha mais saldo a consumir |
 | Cancelado | Somente leitura |
+
+### Encerrar e cancelar
+
+As duas fases finais dizem coisas opostas sobre a mesma compra — "encerrado" e
+"nao ha mais saldo a consumir"; "cancelado" e "nao houve contratacao" — e
+nenhuma combina com um contrato ainda ativo aceitando pedido. Por isso a mudanca
+e recusada enquanto houver contrato ativo no processo, com a mensagem dizendo
+qual e quanto saldo ele ainda tem. Quem decide o destino do saldo e o comprador,
+encerrando o contrato antes.
+
+A demanda acompanha o destino do processo que ela originou:
+
+- **processo cancelado** — a necessidade continua existindo, entao o DFD volta
+  para a fila, solta o vinculo e fica editavel de novo. E o caminho da licitacao
+  fracassada: a secretaria ajusta o que precisa e o Setor de Compras abre outro
+  processo a partir da mesma demanda;
+- **processo encerrado** — a demanda foi atendida e fica concluida.
 
 O Setor de Compras move o processo, e apenas para as fases vizinhas
 (`transicoesDeStatus`). As duas fases da comissao sao excecao: quem as move e a
@@ -337,7 +354,7 @@ processo:
 | --- | --- | --- |
 | Recebimento | A comissao confirma que recebeu o mapa e assume o processo | Em processamento na CPL |
 | Diligencia | Pedido de esclarecimento ou correcao, sem devolver | Fica onde esta |
-| Retorno | A comissao devolve o processo, com o contrato ou sem ele | Contrato recebido |
+| Retorno | A comissao devolve o processo, com o contrato ou sem ele | Devolvido pela CPL |
 
 Diligencia e retorno exigem observacao: sem o motivo escrito, o historico nao
 explica por que o processo voltou.
@@ -345,7 +362,7 @@ explica por que o processo voltou.
 O contrato devolvido vira cadastro proprio. Escolhido o processo de origem, os
 itens do lote entram preenchidos com a quantidade consolidada e o preco de
 referencia do metodo adotado — corrigir tres numeros e mais rapido que digitar
-trinta. Cadastrar o contrato de um processo em "Contrato recebido" leva ele para
+trinta. Cadastrar o contrato de um processo em "Devolvido pela CPL" leva ele para
 "Contrato ativo", na mesma transacao: e o cadastro que atesta o fato.
 
 O valor do contrato nunca e digitado. Ele e a soma dos itens, recalculada no
@@ -483,3 +500,28 @@ sem ETP concluido.
 
 O PDF de minuta sai carimbado como minuta, com aviso no corpo do documento e no
 rodape de todas as paginas, para ninguem juntar rascunho ao processo por engano.
+
+## Roteiro de verificacao
+
+`scripts/fluxo.sh` percorre um ciclo inteiro contra um Postgres real, do banco
+vazio ao saldo do contrato, conferindo o codigo HTTP de cada etapa:
+
+```bash
+npm run dev            # noutro terminal
+npm run verificar      # zera o banco, semeia o superadmin e roda o ciclo
+```
+
+O roteiro cria a prefeitura e os seis perfis, formaliza a demanda, gera o
+processo com os itens do DFD, coleta quantidade de outra secretaria, lanca as
+cotacoes, conclui o ETP, tramita na CPL, cadastra o contrato, executa um pedido
+de fornecimento, encerra tudo e ainda cobre dois caminhos alternativos: o
+segundo ciclo anual importando o consumo do contrato e a licitacao fracassada,
+com a demanda voltando para a fila.
+
+Ele tambem exercita o que **nao** pode: secretaria autorizando o proprio pedido,
+compras registrando tramite da comissao, gestor formalizando demanda, pedido em
+contrato encerrado, encerramento com contrato ativo. Sao 90 etapas; qualquer uma
+fora do esperado aparece no resumo do fim.
+
+**O roteiro zera o banco apontado por `DATABASE_URL`.** Use so no banco local —
+`PULAR_RESET=1 npm run verificar` roda sobre o que ja existe, sem apagar nada.

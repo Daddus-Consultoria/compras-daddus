@@ -298,7 +298,51 @@ export async function alterarStatus(prefeituraId: number, numero: string, novo: 
       [prefeituraId, numero],
     )) as Array<{ id: number; status: ProcessoStatus }>;
     if (!atual) return { erro: "processo-nao-encontrado" as const };
+
+    // "Encerrado" quer dizer que nao ha mais saldo a consumir, e "cancelado",
+    // que nao houve contratacao. Nenhum dos dois combina com um contrato ainda
+    // ativo aceitando pedido: seriam duas verdades sobre o mesmo fato. Quem
+    // decide o destino do saldo e o comprador, encerrando o contrato antes.
+    if (novo === "encerrado" || novo === "cancelado") {
+      const [contrato] = (await executar(
+        `select c.numero,
+                coalesce(sum((ic.quantidade_contratada - coalesce(e.autorizada, 0)) * ic.valor_unitario), 0) as saldo
+         from contratos c
+         left join itens_contrato ic on ic.contrato_id = c.id
+         left join lateral (
+           select sum(ip.quantidade) as autorizada
+           from itens_pedido ip
+           join pedidos_fornecimento p on p.id = ip.pedido_id
+           where ip.item_contrato_id = ic.id and p.status = 'autorizado'
+         ) e on true
+         where c.processo_id = $1 and c.status = 'ativo'
+         group by c.id
+         order by c.numero
+         limit 1`,
+        [atual.id],
+      )) as Array<{ numero: string; saldo: string }>;
+      if (contrato) return { erro: "contrato-ativo" as const, contrato: contrato.numero, saldo: Number(contrato.saldo) };
+    }
+
     await executar("update processos_compra set status = $2::processo_status, atualizado_em = now() where id = $1", [atual.id, novo]);
+
+    // A demanda acompanha o destino do processo que ela originou. Cancelado o
+    // processo — licitacao fracassada, por exemplo —, a necessidade continua
+    // existindo: ela volta para a fila e solta o vinculo, senao a secretaria
+    // fica com um DFD congelado que ninguem consegue reaproveitar.
+    if (novo === "cancelado") {
+      await executar(
+        "update solicitacoes set status = 'pendente'::solicitacao_status, processo_id = null where processo_id = $1",
+        [atual.id],
+      );
+    }
+    // Encerrado o processo, a demanda foi atendida: e o fim natural dela.
+    if (novo === "encerrado") {
+      await executar(
+        "update solicitacoes set status = 'concluido'::solicitacao_status where processo_id = $1",
+        [atual.id],
+      );
+    }
     await executar(
       "insert into historico_status (processo_id, de, para, usuario_id, observacao) values ($1, $2::processo_status, $3::processo_status, $4, $5)",
       [atual.id, atual.status, novo, usuarioId, observacao],
