@@ -3,6 +3,7 @@
 import { ExportLicitacaoPDF } from "@/components/ExportLicitacaoPDF";
 import { AppShell } from "@/components/compras/AppShell";
 import { PainelCotacoes } from "@/components/compras/PainelCotacoes";
+import { TramitesCpl } from "@/components/compras/TramitesCpl";
 import { podeEditarLote, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
 import {
@@ -20,6 +21,8 @@ import {
   nextItemNumber,
   nomeCurtoSecretaria,
   nomeSecretaria,
+  passouPelaCpl,
+  podeMoverParaFase,
   precoUnitario,
   processoStatusLabels,
   quantidadesEditaveis,
@@ -77,6 +80,9 @@ export function ProcessoEditor({
       ? `A fase "${processoStatusLabels[processo.status]}" nao aceita novas cotacoes. ${statusDescricoes[processo.status]}`
       : "Somente o Setor de Compras lanca cotacoes neste processo.";
   const podeIrParaCotacao = compras && !podeCotacao && transicoesDeStatus[processo.status].includes("em_cotacao");
+  // "Em processamento na CPL" e "Contrato recebido" nao viram botao aqui: quem
+  // as registra e a propria comissao, na tramitacao do processo.
+  const fasesDeCompras = transicoesDeStatus[processo.status].filter((fase) => podeMoverParaFase("compras", fase));
 
   const colunaEditavel = (chave: Secretaria) => {
     const secretaria = secretarias.find((opcao) => opcao.chave === chave);
@@ -261,9 +267,9 @@ export function ProcessoEditor({
           <strong>{processoStatusLabels[processo.status]}</strong>
           <span>{statusDescricoes[processo.status]}</span>
         </div>
-        {compras && transicoesDeStatus[processo.status].length > 0 && (
+        {compras && fasesDeCompras.length > 0 && (
           <div className="daddus-linha-acoes">
-            {transicoesDeStatus[processo.status].map((fase) => (
+            {fasesDeCompras.map((fase) => (
               <button key={fase} type="button" className="daddus-secondary-button" onClick={() => mudarFase(fase)}>
                 {processoStatusLabels[fase]} <ChevronRight size={14} />
               </button>
@@ -271,6 +277,10 @@ export function ProcessoEditor({
           </div>
         )}
       </div>
+
+      {passouPelaCpl(processo.status) && (
+        <TramitesCpl numero={processo.id} status={processo.status} papel={sessao.papel} demonstracao={sessao.demonstracao} />
+      )}
 
       {erro && <div className="daddus-inline-warning"><AlertTriangle size={16} /> {erro}</div>}
       {aviso && <div className="daddus-inline-success"><Check size={16} /> {aviso}</div>}

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 const prefeituraVazia = { estado: "", nome: "", cnpj: "", enderecoCompras: "", logoUrl: "" };
 
 export default async function ProcessoPage({ params }: PageProps<"/painel/compras/processo/[id]">) {
-  const sessao = await exigirPapel("compras", "gestor", "admin", "secretario");
+  const sessao = await exigirPapel("compras", "gestor", "admin", "cpl", "secretario");
   const { id } = await params;
   const [{ processo }, secretarias] = await Promise.all([obterProcesso(sessao.prefeituraId, id), obterSecretarias(sessao.prefeituraId)]);
   if (!processo) notFound();

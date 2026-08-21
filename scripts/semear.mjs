@@ -65,6 +65,7 @@ try {
   const usuarios = [
     { email: "admin@novaesperanca.sp.gov.br", nome: "Helena Prado", papel: "admin", prefeitura: prefeituraId, secretaria: null },
     { email: "compras@novaesperanca.sp.gov.br", nome: "Marina Alves", papel: "compras", prefeitura: prefeituraId, secretaria: null },
+    { email: "cpl@novaesperanca.sp.gov.br", nome: "Sergio Tavares", papel: "cpl", prefeitura: prefeituraId, secretaria: null },
     { email: "educacao@novaesperanca.sp.gov.br", nome: "Rafael Nunes", papel: "secretario", prefeitura: prefeituraId, secretaria: idPorChave.educacao },
     { email: "saude@novaesperanca.sp.gov.br", nome: "Camila Rocha", papel: "secretario", prefeitura: prefeituraId, secretaria: idPorChave.saude },
     { email: "gestor@novaesperanca.sp.gov.br", nome: "Joao Pedro Lima", papel: "gestor", prefeitura: prefeituraId, secretaria: null },
