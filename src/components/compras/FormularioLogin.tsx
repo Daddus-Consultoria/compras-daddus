@@ -3,6 +3,7 @@
 import { AlertTriangle, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import Image from "next/image";
 
 export function FormularioLogin({ destino, demonstracao }: { destino: string; demonstracao: boolean }) {
   const router = useRouter();
@@ -35,8 +36,7 @@ export function FormularioLogin({ destino, demonstracao }: { destino: string; de
     <div className="daddus-login">
       <form className="daddus-login-card" onSubmit={entrar}>
         <div className="daddus-brand">
-          <span className="daddus-brand-mark">D</span>
-          <span>daddus</span>
+          <Image src="/marca/horizontal-preto.png" alt="Daddus Consultoria" width={237} height={96} priority />
         </div>
         <div className="daddus-product">Portal de gestao <strong>COMPRAS</strong></div>
         <h1>Entrar no portal</h1>
