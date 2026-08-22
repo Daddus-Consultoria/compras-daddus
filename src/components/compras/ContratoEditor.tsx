@@ -139,7 +139,7 @@ export function ContratoEditor({
         </div>
         {editavel && (
           <div className="daddus-heading-actions">
-            <button type="button" className="daddus-primary-button" onClick={salvar} disabled={salvando || !sujo}>
+            <button type="button" className="daddus-confirm-button" onClick={salvar} disabled={salvando || !sujo}>
               <Check size={16} /> {salvando ? "Salvando..." : "Salvar contrato"}
             </button>
           </div>

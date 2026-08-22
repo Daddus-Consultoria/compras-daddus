@@ -140,7 +140,7 @@ export function GestaoUsuarios({
             </div>
           </div>
           <div className="daddus-form-actions">
-            <button className="daddus-primary-button" type="submit" disabled={salvando || !prefeituraId}>
+            <button className="daddus-admin-button" type="submit" disabled={salvando || !prefeituraId}>
               <UserPlus size={16} /> {salvando ? "Cadastrando..." : "Cadastrar usuario"}
             </button>
           </div>
@@ -187,7 +187,7 @@ export function GestaoUsuarios({
                     ) : (
                       <div className="daddus-linha-acoes">
                         <button type="button" className="daddus-row-action" onClick={() => redefinirSenha(usuario)}><KeyRound size={13} /> Senha</button>
-                        <button type="button" className="daddus-row-action" onClick={() => alterar(usuario.id, { ativo: !usuario.ativo }, `${usuario.nome} ${usuario.ativo ? "desativado" : "reativado"}.`)}>
+                        <button type="button" className={`daddus-row-action${usuario.ativo ? " perigo" : ""}`} onClick={() => alterar(usuario.id, { ativo: !usuario.ativo }, `${usuario.nome} ${usuario.ativo ? "desativado" : "reativado"}.`)}>
                           {usuario.ativo ? "Desativar" : "Reativar"}
                         </button>
                       </div>

@@ -34,7 +34,7 @@ export function CentralCompras({ processos, sessao, secretarias }: { processos: 
   const proximoPrazo = [...processos].sort((a, b) => parseDataBr(a.prazoLimite) - parseDataBr(b.prazoLimite))[0];
 
   return (
-    <AppShell sessao={sessao}>
+    <AppShell sessao={sessao} titulo="Central de compras">
       <div className="daddus-page-heading daddus-page-heading-actions">
         <div>
           <span className="daddus-overline">Operacao municipal</span>

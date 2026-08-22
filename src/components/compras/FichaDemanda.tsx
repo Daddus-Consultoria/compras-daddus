@@ -138,7 +138,7 @@ export function FichaDemanda({ dfd, sessao, prefeitura }: { dfd: Dfd; sessao: Se
             </Link>
           )}
           {editavel && (
-            <button type="button" className="daddus-primary-button" onClick={salvar} disabled={salvando || !sujo}>
+            <button type="button" className="daddus-confirm-button" onClick={salvar} disabled={salvando || !sujo}>
               <Check size={16} /> {salvando ? "Salvando..." : "Salvar demanda"}
             </button>
           )}

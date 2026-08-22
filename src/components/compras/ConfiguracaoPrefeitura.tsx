@@ -190,10 +190,10 @@ export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciai
                           {podeEditar && (
                             <td>
                               <div className="daddus-linha-acoes">
-                                <button type="button" className="daddus-row-action" onClick={() => chamarSecretarias("PATCH", { id: secretaria.id, ativa: !secretaria.ativa })}>
+                                <button type="button" className={`daddus-row-action${secretaria.ativa ? " perigo" : ""}`} onClick={() => chamarSecretarias("PATCH", { id: secretaria.id, ativa: !secretaria.ativa })}>
                                   {secretaria.ativa ? "Desativar" : "Reativar"}
                                 </button>
-                                <button type="button" className="daddus-row-action" onClick={() => chamarSecretarias("DELETE", null, `?id=${secretaria.id}`)}>
+                                <button type="button" className="daddus-row-action perigo" onClick={() => chamarSecretarias("DELETE", null, `?id=${secretaria.id}`)}>
                                   <Trash2 size={13} /> Excluir
                                 </button>
                               </div>
@@ -220,7 +220,7 @@ export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciai
               {erro && <span className="daddus-inline-error"><AlertTriangle size={15} /> {erro}</span>}
               {saved && <span className="daddus-success"><CheckCircle2 size={16} /> Dados salvos</span>}
               {podeEditar && (
-                <button className="daddus-primary-button" type="submit" disabled={salvando}>
+                <button className="daddus-confirm-button" type="submit" disabled={salvando}>
                   <Save size={16} /> {salvando ? "Salvando..." : "Salvar configuracao"}
                 </button>
               )}

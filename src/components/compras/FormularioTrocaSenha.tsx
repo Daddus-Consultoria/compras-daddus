@@ -62,7 +62,7 @@ export function FormularioTrocaSenha({ nome, obrigatoria }: { nome: string; obri
 
         {erro && <span className="daddus-inline-error"><AlertTriangle size={15} /> {erro}</span>}
 
-        <button className="daddus-primary-button" type="submit" disabled={salvando}>
+        <button className="daddus-confirm-button" type="submit" disabled={salvando}>
           <KeyRound size={16} /> {salvando ? "Salvando..." : "Salvar nova senha"}
         </button>
       </form>

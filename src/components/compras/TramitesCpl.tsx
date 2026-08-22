@@ -119,7 +119,7 @@ export function TramitesCpl({
             Observacao
             <input name="observacao" placeholder={tipo === "recebimento" ? "Opcional" : "Obrigatoria"} />
           </label>
-          <button type="submit" className="daddus-primary-button" disabled={salvando}>
+          <button type="submit" className="daddus-move-button" disabled={salvando}>
             {salvando ? <Loader2 size={15} className="daddus-girando" /> : <Stamp size={15} />}
             {salvando ? "Registrando..." : "Registrar"}
           </button>

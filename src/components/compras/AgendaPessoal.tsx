@@ -247,7 +247,7 @@ export function AgendaPessoal({ processos }: { processos: Processo[] }) {
         />
       </label>
       {aviso && <span className="daddus-success"><CheckCircle2 size={15} /> {aviso}</span>}
-      <button className="daddus-secondary-button" type="button" onClick={salvarNota} disabled={salvandoNota || somenteLeitura}>
+      <button className="daddus-confirm-button" type="button" onClick={salvarNota} disabled={salvandoNota || somenteLeitura}>
         <Check size={14} /> {salvandoNota ? "Salvando..." : "Salvar nota"}
       </button>
     </section>

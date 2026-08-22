@@ -96,7 +96,7 @@ export function GestaoPrefeituras({ sessao, prefeituras: iniciais }: { sessao: S
             </div>
           </div>
           <div className="daddus-form-actions">
-            <button className="daddus-primary-button" type="submit" disabled={salvando}>
+            <button className="daddus-admin-button" type="submit" disabled={salvando}>
               <Building2 size={16} /> {salvando ? "Criando..." : "Criar prefeitura"}
             </button>
           </div>
