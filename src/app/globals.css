@@ -205,11 +205,6 @@ button { font: inherit; }
 
 .daddus-brand { align-items: center; color: var(--ink); display: flex; font-size: 15px; font-weight: 600; gap: 12px; letter-spacing: -.2px; padding: 0 19px; }
 .daddus-sidebar .daddus-brand { border-bottom: 1px solid rgba(255, 255, 255, .09); color: #fff; padding-bottom: 15px; }
-.daddus-brand-mark { background: var(--gold); border-radius: 8px; color: var(--rail); font-size: 15px; height: 32px; width: 32px; }
-.daddus-login-card .daddus-brand-mark { background: var(--primary); color: #fff; }
-.daddus-brand-word { line-height: 1.25; }
-.daddus-brand-word strong { color: #fff; display: block; font-size: 13.5px; font-weight: 600; letter-spacing: .02em; }
-.daddus-brand-word span { color: var(--gold); display: block; font-size: 9.5px; font-weight: 600; letter-spacing: .18em; }
 .daddus-product { border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; letter-spacing: .04em; margin: 0 0 4px; padding-bottom: 14px; text-transform: uppercase; }
 .daddus-product strong { color: var(--ink); display: block; font-size: 12px; letter-spacing: .12em; margin-top: 6px; }
 
@@ -371,3 +366,14 @@ button { font: inherit; }
   .daddus-user-context { max-width: 40vw; }
   .daddus-top-actions { gap: 6px; }
 }
+
+/* ---- marca: simbolo sempre, assinatura completa quando a barra abre ---- */
+.daddus-brand { gap: 13px; padding-bottom: 4px; }
+.daddus-sidebar .daddus-brand { align-items: flex-start; padding-bottom: 16px; }
+.daddus-marca-simbolo { flex: none; height: 29px; width: auto; }
+.daddus-marca-texto { display: block; padding-top: 2px; }
+.daddus-marca-texto img { display: block; height: 29px; width: auto; }
+.daddus-marca-texto span { color: var(--gold); display: block; font-size: 9px; font-weight: 600; letter-spacing: .16em; margin-top: 5px; text-transform: uppercase; }
+/* Nas telas de entrada a marca vem por extenso, em preto sobre o cartao claro. */
+.daddus-login-card .daddus-brand { padding: 0; }
+.daddus-login-card .daddus-brand img { height: 42px; width: auto; }

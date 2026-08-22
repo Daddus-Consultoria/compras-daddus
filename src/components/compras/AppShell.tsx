@@ -4,6 +4,7 @@ import { papelLabels, type Papel } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
 import { SinoNotificacoes } from "@/components/compras/SinoNotificacoes";
 import { Building2, ClipboardList, Database, FileSignature, LayoutDashboard, LogOut, Menu, PackageCheck, PanelLeftClose, PanelLeftOpen, Settings2, ShoppingCart, Stamp, Users, X } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState, useSyncExternalStore } from "react";
@@ -154,11 +155,12 @@ export function AppShell({ children, sessao, titulo = "Compras" }: { children: R
       {gavetaAberta && <div className="daddus-scrim" onClick={() => setGavetaAberta(false)} aria-hidden />}
 
       <aside className={`daddus-sidebar${fixa ? " fixa" : ""}${gavetaAberta ? " aberta" : ""}`}>
-        <Link href="/painel" className="daddus-brand" onClick={() => setGavetaAberta(false)}>
-          <span className="daddus-brand-mark">D</span>
-          <span className="daddus-reveal daddus-brand-word">
-            <strong>daddus</strong>
-            <span>COMPRAS</span>
+        {/* Recolhida a barra mostra so o simbolo; aberta, a marca por extenso. */}
+        <Link href="/painel" className="daddus-brand" onClick={() => setGavetaAberta(false)} aria-label="Daddus Compras">
+          <Image className="daddus-marca-simbolo" src="/marca/simbolo-branco.png" alt="" width={99} height={96} priority />
+          <span className="daddus-reveal daddus-marca-texto">
+            <Image src="/marca/texto-branco.png" alt="Daddus Consultoria" width={233} height={72} priority />
+            <span>Portal de compras</span>
           </span>
         </Link>
 

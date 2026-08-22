@@ -3,6 +3,7 @@
 import { AlertTriangle, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import Image from "next/image";
 
 export function FormularioTrocaSenha({ nome, obrigatoria }: { nome: string; obrigatoria: boolean }) {
   const router = useRouter();
@@ -39,8 +40,7 @@ export function FormularioTrocaSenha({ nome, obrigatoria }: { nome: string; obri
     <div className="daddus-login">
       <form className="daddus-login-card" onSubmit={trocar}>
         <div className="daddus-brand">
-          <span className="daddus-brand-mark">D</span>
-          <span>daddus</span>
+          <Image src="/marca/horizontal-preto.png" alt="Daddus Consultoria" width={237} height={96} priority />
         </div>
         <h1>Definir uma nova senha</h1>
         <p className="daddus-muted">
