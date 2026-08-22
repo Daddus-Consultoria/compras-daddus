@@ -2,6 +2,7 @@
 
 import { ExportLicitacaoPDF } from "@/components/ExportLicitacaoPDF";
 import { AppShell } from "@/components/compras/AppShell";
+import { BarraDeFases } from "@/components/compras/BarraDeFases";
 import { PainelCotacoes } from "@/components/compras/PainelCotacoes";
 import { TramitesCpl } from "@/components/compras/TramitesCpl";
 import { podeEditarLote, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
@@ -12,6 +13,7 @@ import {
   cotacoesEditaveis,
   cotacoesValidas,
   estruturaEditavel,
+  fasesEmOrdem,
   itemPendente,
   itemTotalQuantity,
   loteTotal,
@@ -27,7 +29,6 @@ import {
   processoStatusLabels,
   quantidadesEditaveis,
   statusDescricoes,
-  statusTone,
   toNumericValue,
   transicoesDeStatus,
   type LoteItem,
@@ -38,7 +39,7 @@ import {
   type Secretaria,
   type SecretariaInfo,
 } from "@/lib/compras";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, ExternalLink, Plus, Trash2, FileSearch } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Plus, Trash2, FileSearch } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
@@ -83,6 +84,20 @@ export function ProcessoEditor({
   // "Em processamento na CPL" e "Devolvido pela CPL" nao viram botao aqui: quem
   // as registra e a propria comissao, na tramitacao do processo.
   const fasesDeCompras = transicoesDeStatus[processo.status].filter((fase) => podeMoverParaFase("compras", fase));
+
+  /**
+   * Nem toda transicao pesa igual. Avancar e a acao principal da fase; voltar e
+   * conserto; cancelar e saida sem volta. Tres pesos, para so um botao solido
+   * disputar a atencao de quem esta conduzindo o processo.
+   */
+  const ordemNaLinha = { retorno: 0, cancelamento: 1, avanco: 2 } as const;
+
+  const pesoDaTransicao = (destino: ProcessoStatus) => {
+    if (destino === "cancelado") return "cancelamento" as const;
+    return fasesEmOrdem.indexOf(destino) > fasesEmOrdem.indexOf(processo.status)
+      ? ("avanco" as const)
+      : ("retorno" as const);
+  };
 
   const colunaEditavel = (chave: Secretaria) => {
     const secretaria = secretarias.find((opcao) => opcao.chave === chave);
@@ -234,7 +249,7 @@ export function ProcessoEditor({
   const total = loteTotal(items, metodo);
 
   return (
-    <AppShell sessao={sessao}>
+    <AppShell sessao={sessao} titulo={`Processo PE ${processo.id}`}>
       <div className="daddus-page-heading daddus-page-heading-actions">
         <div>
           <Link href="/painel/compras" className="daddus-back-link"><ArrowLeft size={15} /> Voltar para processos</Link>
@@ -249,7 +264,7 @@ export function ProcessoEditor({
           </Link>
           <ExportLicitacaoPDF items={items} prefeitura={prefeitura} processo={processo} secretarias={secretarias} notas={notes} />
           {(podeQuantidade || podeEstrutura) && (
-            <button className="daddus-primary-button" type="button" onClick={salvarLote} disabled={salvando}>
+            <button className="daddus-confirm-button" type="button" onClick={salvarLote} disabled={salvando}>
               <Check size={16} /> {salvando ? "Salvando..." : "Salvar lote"}
             </button>
           )}
@@ -257,30 +272,43 @@ export function ProcessoEditor({
       </div>
 
       <div className="daddus-process-meta">
-        <div>
-          <span>Fase</span>
-          <strong className={`daddus-status ${statusTone(processo.status)}`}>{processoStatusLabels[processo.status]}</strong>
-        </div>
         <div><span>Prazo limite</span><strong>{processo.prazoLimite}</strong></div>
         <div><span>Responsavel</span><strong>{processo.responsavel}</strong></div>
         <div><span>Ultima atualizacao</span><strong>{dirty ? "Alteracoes nao salvas" : processo.atualizadoEm}</strong></div>
       </div>
 
-      <div className="daddus-fase">
-        <div>
-          <strong>{processoStatusLabels[processo.status]}</strong>
-          <span>{statusDescricoes[processo.status]}</span>
-        </div>
-        {compras && fasesDeCompras.length > 0 && (
-          <div className="daddus-linha-acoes">
-            {fasesDeCompras.map((fase) => (
-              <button key={fase} type="button" className="daddus-secondary-button" onClick={() => mudarFase(fase)}>
-                {processoStatusLabels[fase]} <ChevronRight size={14} />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <BarraDeFases
+        status={processo.status}
+        acoes={compras && fasesDeCompras.length > 0
+          ? fasesDeCompras
+              .slice()
+              // Da esquerda para a direita: desfazer, sair, avancar. A acao que a
+              // pessoa veio fazer fica na ponta direita, onde a mao ja esta.
+              .sort((a, b) => ordemNaLinha[pesoDaTransicao(a)] - ordemNaLinha[pesoDaTransicao(b)])
+              .map((fase) => {
+                const peso = pesoDaTransicao(fase);
+                if (peso === "cancelamento") {
+                  return (
+                    <button key={fase} type="button" className="daddus-danger-button" onClick={() => mudarFase(fase)}>
+                      Cancelar processo
+                    </button>
+                  );
+                }
+                if (peso === "retorno") {
+                  return (
+                    <button key={fase} type="button" className="daddus-ghost-button" onClick={() => mudarFase(fase)}>
+                      <ChevronLeft size={14} /> Voltar para {processoStatusLabels[fase].toLowerCase()}
+                    </button>
+                  );
+                }
+                return (
+                  <button key={fase} type="button" className="daddus-move-button" onClick={() => mudarFase(fase)}>
+                    {processoStatusLabels[fase]} <ChevronRight size={14} />
+                  </button>
+                );
+              })
+          : undefined}
+      />
 
       {passouPelaCpl(processo.status) && (
         <TramitesCpl numero={processo.id} status={processo.status} papel={sessao.papel} demonstracao={sessao.demonstracao} />

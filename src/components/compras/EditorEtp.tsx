@@ -149,10 +149,10 @@ export function EditorEtp({
               </button>
             ) : (
               <>
-                <button type="button" className="daddus-secondary-button" onClick={() => decidir("concluir")} disabled={salvando}>
+                <button type="button" className="daddus-move-button" onClick={() => decidir("concluir")} disabled={salvando}>
                   <Lock size={15} /> Concluir estudo
                 </button>
-                <button type="button" className="daddus-primary-button" onClick={salvar} disabled={salvando || !sujo}>
+                <button type="button" className="daddus-confirm-button" onClick={salvar} disabled={salvando || !sujo}>
                   <Check size={16} /> {salvando ? "Salvando..." : "Salvar"}
                 </button>
               </>

@@ -149,7 +149,7 @@ export function PainelCotacoes({
         <div className="daddus-inline-warning">
           <Ban size={15} /> {motivoBloqueio}
           {aoLiberar && (
-            <button type="button" className="daddus-secondary-button" onClick={aoLiberar.acao}>
+            <button type="button" className="daddus-move-button" onClick={aoLiberar.acao}>
               {aoLiberar.rotulo}
             </button>
           )}
