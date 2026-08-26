@@ -251,6 +251,44 @@ publicas primeiro, fornecedor por ultimo:
 | Midia especializada | Publicacoes do setor |
 | Fornecedor | Pesquisa direta |
 
+### Consulta automatica ao Painel de Precos
+
+As duas primeiras fontes da tabela sao lidas na origem, sem redigitar. A API de
+dados abertos do Compras.gov.br (`dadosabertos.compras.gov.br`) e publica e nao
+pede chave, e devolve as compras ja realizadas para um item: preco praticado,
+orgao comprador, fornecedor, data e unidade de fornecimento.
+
+Duas restricoes da origem mandam no desenho:
+
+1. **A consulta e por codigo, nunca por texto.** O Painel pesquisa por CATMAT
+   (material) ou CATSER (servico). Por isso o item do lote tem a coluna
+   **Catalogo**: sem o codigo, nao ha consulta.
+2. **A origem nao busca por descricao.** Foi conferido que o parametro
+   `descricaoItem` do catalogo devolve zero resultados mesmo para a descricao
+   literal de um item. Por isso o catalogo e copiado para o Postgres local por
+   `npm run catalogo` e pesquisado aqui, com indice de relevancia em portugues.
+
+```bash
+npm run catalogo            # CATMAT (~344 mil itens) e CATSER (~3 mil)
+npm run catalogo -- servico # so um dos dois
+```
+
+A coleta e idempotente e pode ser repetida. Leva alguns minutos para o CATMAT.
+**`npm run db:resetar` e `npm run verificar` apagam o catalogo junto com o resto
+do schema** — depois deles, rode a coleta de novo.
+
+O preco importado vira uma cotacao comum, com fonte `painel_precos`, o orgao
+comprador na descricao e o id da compra no documento. Nada entra sozinho: cada
+linha e importada por um clique, porque a IN 65 pede analise critica dos precos
+e uma cesta montada de enfiada dilui quem responde pelo mapa. A tela marca o
+preco publicado em **unidade diferente** da do lote — o mesmo copo descartavel
+aparece a R$ 0,03 por UN e a R$ 2,95 por PCT, e somar os dois produz um valor de
+referencia que nao existe. O sistema nao converte unidade.
+
+CATMAT e CATSER **compartilham a numeracao** — o codigo 1171 e "ENSAIO E
+ANALISES QUIMICAS" num catalogo e "CABRESTANTE DE EMBARCACAO" no outro. Por isso
+o codigo anda sempre acompanhado do tipo, no banco e na API.
+
 ### Formacao do preco
 
 O valor de referencia sai da **media**, da **mediana** ou do **menor preco** das

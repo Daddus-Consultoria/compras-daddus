@@ -4,6 +4,8 @@ import { ExportLicitacaoPDF } from "@/components/ExportLicitacaoPDF";
 import { AppShell } from "@/components/compras/AppShell";
 import { BarraDeFases } from "@/components/compras/BarraDeFases";
 import { PainelCotacoes } from "@/components/compras/PainelCotacoes";
+import { PrecosPublicos } from "@/components/compras/PrecosPublicos";
+import { SeletorCatalogo } from "@/components/compras/SeletorCatalogo";
 import { TramitesCpl } from "@/components/compras/TramitesCpl";
 import { podeEditarLote, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
@@ -28,6 +30,7 @@ import {
   precoUnitario,
   processoStatusLabels,
   quantidadesEditaveis,
+  situacaoDoLancamento,
   statusDescricoes,
   toNumericValue,
   transicoesDeStatus,
@@ -38,8 +41,9 @@ import {
   type ProcessoStatus,
   type Secretaria,
   type SecretariaInfo,
+  type VinculoCatalogo,
 } from "@/lib/compras";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Plus, Trash2, FileSearch } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, ExternalLink, Lock, Plus, RotateCcw, Trash2, FileSearch } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
@@ -99,11 +103,53 @@ export function ProcessoEditor({
       : ("retorno" as const);
   };
 
+  const situacao = situacaoDoLancamento(processo, secretarias);
+  const meuLancamento = minhaSecretaria ? situacao.lancamentoDe(minhaSecretaria) : null;
+  const jaConcluiu = Boolean(meuLancamento);
+
   const colunaEditavel = (chave: Secretaria) => {
     const secretaria = secretarias.find((opcao) => opcao.chave === chave);
     if (!podeQuantidade || (secretaria && !secretaria.ativa)) return false;
+    // Concluido e concluido: o campo trava ate a secretaria reabrir. Deixar
+    // digitavel um numero ja declarado final abriria a porta para o lote mudar
+    // depois de o Setor de Compras ter lido "3 de 3 concluidas" e avancado.
+    if (!compras && jaConcluiu) return false;
     return compras || chave === minhaSecretaria;
   };
+
+  /**
+   * Por que nao da para digitar em coluna nenhuma.
+   *
+   * Existia um beco sem saida aqui: quando `podeQuantidade` era true mas nenhuma
+   * coluna passava no `colunaEditavel`, a tela seguia anunciando "Voce lanca as
+   * quantidades da Secretaria de X" com todos os campos travados, e nada dizia
+   * o motivo. Dois caminhos chegam nisso — a secretaria desativada, e o vinculo
+   * do usuario apontando para uma chave que a prefeitura nao tem (o nome ate
+   * aparece certo no aviso, porque `nomeCurtoSecretaria` cai no fallback da
+   * propria chave). Agora cada um se explica.
+   */
+  const minhaInfo = minhaSecretaria
+    ? secretarias.find((secretaria) => secretaria.chave === minhaSecretaria)
+    : undefined;
+
+  const impedimento = (() => {
+    if (compras || !podeQuantidade) return null;
+    if (!minhaSecretaria) {
+      return "Seu usuario nao esta vinculado a nenhuma secretaria, entao nao ha coluna para voce lancar. Peca ao administrador da prefeitura para fazer o vinculo.";
+    }
+    if (!minhaInfo) {
+      return `Seu usuario esta vinculado a secretaria "${minhaSecretaria}", que nao existe nesta prefeitura — provavelmente foi renomeada. Peca ao administrador para corrigir o vinculo.`;
+    }
+    if (!minhaInfo.ativa) {
+      return `A Secretaria de ${minhaInfo.nome} esta desativada, e secretaria desativada nao lanca quantidade nova. Peca ao administrador para reativa-la.`;
+    }
+    return null;
+  })();
+
+  // O painel de coleta so faz sentido enquanto a coleta esta aberta; depois
+  // dela o que importa e o numero consolidado, nao quem faltava.
+  const coletaAberta = quantidadesEditaveis(processo.status);
+  const podeConcluirLancamento = !compras && !impedimento && podeQuantidade && Boolean(minhaInfo);
 
   useEffect(() => {
     if (!aviso) return;
@@ -117,6 +163,10 @@ export function ProcessoEditor({
   };
 
   const updateText = (id: string, field: "especificacao" | "unidade", value: string) => patchItem(id, (item) => ({ ...item, [field]: value }));
+  // O vinculo com o catalogo e estrutura do item, entao segue o mesmo caminho
+  // das demais edicoes: fica local ate o "Salvar lote".
+  const updateCatalogo = (id: string, vinculo: VinculoCatalogo | null) =>
+    patchItem(id, (item) => ({ ...item, catalogo: vinculo }));
   const updateQuantity = (id: string, secretaria: Secretaria, value: string) =>
     patchItem(id, (item) => ({ ...item, quantidades: { ...item.quantidades, [secretaria]: toNumericValue(value) } }));
 
@@ -223,8 +273,36 @@ export function ProcessoEditor({
     if (await chamar(`${rotaCotacoes}?id=${id}`, { method: "DELETE" }, "Cotacao removida.")) await sincronizarCotacoes();
   };
 
+  const rotaLancamento = `/api/processos/${encodeURIComponent(processo.id)}/lancamento`;
+
+  const concluirLancamento = async () => {
+    if (dirty && !window.confirm("Ha quantidade digitada e nao salva. Concluir assim mesmo deixa de fora o que nao foi gravado.\n\nContinuar?")) return;
+    await chamar(rotaLancamento, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }, "Lancamento concluido.");
+  };
+
+  const reabrirLancamento = async (chave: Secretaria) =>
+    chamar(`${rotaLancamento}?secretaria=${encodeURIComponent(chave)}`, { method: "DELETE" }, "Lancamento reaberto.");
+
   const mudarFase = async (novo: ProcessoStatus) => {
-    const observacao = window.prompt(`Mover para "${processoStatusLabels[novo]}".\n${statusDescricoes[novo]}\n\nObservacao (opcional):`) ?? "";
+    /**
+     * Sair da coleta com secretaria pendente e permitido, mas o motivo vira
+     * parte do historico da fase. O servidor recusa sem ele (422); avisar aqui
+     * evita a viagem perdida, e diz de quem se esta falando antes do clique.
+     */
+    const cobraMotivo =
+      processo.status === "coleta_quantidades" && novo === "em_cotacao" && situacao.pendentes.length > 0;
+    const cabecalho = cobraMotivo
+      ? `Mover para "${processoStatusLabels[novo]}".\n\n`
+        + `${situacao.pendentes.length} de ${situacao.total} secretaria(s) ainda nao concluiram o lancamento: `
+        + `${situacao.pendentes.map((secretaria) => secretaria.nome).join(", ")}.\n\n`
+        + "Descreva o motivo de seguir sem elas (minimo 10 caracteres). Ele fica no historico do processo:"
+      : `Mover para "${processoStatusLabels[novo]}".\n${statusDescricoes[novo]}\n\nObservacao (opcional):`;
+
+    const observacao = window.prompt(cabecalho) ?? "";
+    if (cobraMotivo && observacao.trim().length < 10) {
+      setErro("Mudanca cancelada: seguir com secretaria pendente exige um motivo de ao menos 10 caracteres.");
+      return;
+    }
     await chamar(
       `/api/processos/${encodeURIComponent(processo.id)}/status`,
       { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: novo, observacao }) },
@@ -352,7 +430,68 @@ export function ProcessoEditor({
         </div>
       )}
 
+      {/* Coleta de quantidades: quem ja fechou e quem falta.
+          Antes essa pergunta so tinha resposta por inferencia (algum numero
+          maior que zero), que confunde "nao preciso de nada" com "nao entrou".
+          Ver db/migrations/008. */}
+      {coletaAberta && situacao.total > 0 && (
+        <div className="daddus-editor-card daddus-coleta">
+          <div className="daddus-coleta-cabecalho">
+            <div>
+              <h3>Coleta de quantidades</h3>
+              <p>
+                {situacao.concluidas.length} de {situacao.total} secretaria(s) concluiram o lancamento.
+                {situacao.pendentes.length > 0
+                  ? " O processo pode seguir sem as demais, registrando o motivo."
+                  : " Todas concluiram: o lote esta pronto para a cotacao."}
+              </p>
+            </div>
+            {podeConcluirLancamento && (
+              meuLancamento ? (
+                <button type="button" className="daddus-ghost-button" onClick={() => reabrirLancamento(minhaSecretaria as Secretaria)}>
+                  <RotateCcw size={14} /> Reabrir meu lancamento
+                </button>
+              ) : (
+                <button type="button" className="daddus-confirm-button" onClick={concluirLancamento}>
+                  <Check size={16} /> Concluir meu lancamento
+                </button>
+              )
+            )}
+          </div>
+
+          <ul className="daddus-coleta-lista">
+            {[...situacao.concluidas, ...situacao.pendentes].map((secretaria) => {
+              const lancamento = situacao.lancamentoDe(secretaria.chave);
+              return (
+                <li key={secretaria.chave} className={lancamento ? "concluida" : "pendente"}>
+                  {lancamento ? <CheckCircle2 size={15} /> : <Circle size={15} />}
+                  <strong>{secretaria.nome}</strong>
+                  <span>
+                    {lancamento
+                      ? `concluiu em ${lancamento.concluidoEm}${lancamento.concluidoPor ? `, por ${lancamento.concluidoPor}` : ""}`
+                      : "pendente"}
+                  </span>
+                  {compras && lancamento && (
+                    <button type="button" className="daddus-row-action" onClick={() => reabrirLancamento(secretaria.chave)}>
+                      Reabrir
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <div className="daddus-editor-card">
+        {/* Impedimento vem antes do aviso comum: enquanto ele existe, a frase
+            "voce lanca as quantidades da sua secretaria" e falsa. */}
+        {impedimento ? (
+          <div className="daddus-permission-note daddus-permission-blocked">
+            <span className="daddus-info-icon"><Lock size={13} /></span>
+            <span>{impedimento}</span>
+          </div>
+        ) : (
         <div className="daddus-permission-note">
           <span className="daddus-info-icon">i</span>
           {!podeQuantidade && !podeEstrutura && !podeCotacao ? (
@@ -363,11 +502,14 @@ export function ProcessoEditor({
             ].filter(Boolean).join(", ")}.{compras && podeQuantidade && ajusteExigeJustificativa(processo.status)
               ? " Alterar um numero lancado por uma secretaria pede justificativa, que fica registrada no processo."
               : ""}</span>
+          ) : meuLancamento ? (
+            <span>Voce ja concluiu o lancamento da <strong>Secretaria de {nomeCurtoSecretaria(secretarias, minhaSecretaria)}</strong>. Para corrigir um numero, reabra o lancamento acima.</span>
           ) : (
             <span>Voce lanca as quantidades da <strong>Secretaria de {nomeCurtoSecretaria(secretarias, minhaSecretaria)}</strong>. As demais colunas e as cotacoes ficam bloqueadas.</span>
           )}
           <ChevronDown size={15} />
         </div>
+        )}
         <div className="daddus-table-wrap">
           <table className="daddus-table lot-table">
             <thead>
@@ -375,6 +517,7 @@ export function ProcessoEditor({
                 <th>Item</th>
                 <th>Especificacao detalhada</th>
                 <th>Un.</th>
+                <th>Catalogo</th>
                 {secretarias.map((secretaria) => (
                   <th key={secretaria.chave} title={secretaria.ativa ? undefined : "Secretaria desativada"}>
                     {secretaria.nome}{secretaria.ativa ? "" : " *"}
@@ -403,6 +546,17 @@ export function ProcessoEditor({
                       <td>
                         <input className="cell-input unit" value={item.unidade} disabled={!podeEstrutura}
                                onChange={(event) => updateText(item.id, "unidade", event.target.value)} />
+                      </td>
+                      {/* Sem codigo de catalogo nao ha consulta ao Painel de
+                          Precos: a origem pesquisa por CATMAT/CATSER, nunca
+                          pela especificacao digitada. */}
+                      <td>
+                        <SeletorCatalogo
+                          valor={item.catalogo ?? null}
+                          editavel={podeEstrutura}
+                          sugestao={item.especificacao}
+                          aoEscolher={(vinculo) => updateCatalogo(item.id, vinculo)}
+                        />
                       </td>
                       {secretarias.map((secretaria) => (
                         <td key={secretaria.chave}>
@@ -436,7 +590,10 @@ export function ProcessoEditor({
                     </tr>
                     {aberto && (
                       <tr className="linha-cotacoes">
-                        <td colSpan={secretarias.length + 8}>
+                        <td colSpan={secretarias.length + 9}>
+                          {podeCotacao && (
+                            <PrecosPublicos processoId={processo.id} item={item} aoImportar={criarCotacao} />
+                          )}
                           <PainelCotacoes
                             item={item}
                             editavel={podeCotacao}
@@ -453,7 +610,7 @@ export function ProcessoEditor({
                 );
               })}
               {items.length === 0 && (
-                <tr><td colSpan={secretarias.length + 8} className="daddus-empty">Nenhum item no lote. Use &ldquo;Adicionar item&rdquo; para comecar.</td></tr>
+                <tr><td colSpan={secretarias.length + 9} className="daddus-empty">Nenhum item no lote. Use &ldquo;Adicionar item&rdquo; para comecar.</td></tr>
               )}
             </tbody>
           </table>
