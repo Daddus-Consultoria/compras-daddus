@@ -83,18 +83,6 @@ export function PainelCotacoes({
 
   return (
     <div className="daddus-cotacoes">
-      <div className="daddus-cotacoes-resumo">
-        <span>
-          <strong>{validas.length}</strong> {validas.length === 1 ? "cotacao valida" : "cotacoes validas"}
-          {item.cotacoes.length > validas.length && ` · ${item.cotacoes.length - validas.length} desconsiderada(s)`}
-        </span>
-        {validas.length > 0 && <span>Mediana {money(mediana)}</span>}
-        {validas.length > 1 && (
-          <span className={dispersao > 0.25 ? "alerta" : ""}>
-            Dispersao {(dispersao * 100).toFixed(1)}%
-          </span>
-        )}
-      </div>
 
       {validas.length < minimoDeCotacoes && (
         <div className="daddus-inline-warning">
@@ -107,6 +95,13 @@ export function PainelCotacoes({
         </div>
       )}
 
+      <div className="daddus-cotacoes-quadro">
+      {/* Os dois quadros da gaveta sao brancos e do mesmo tamanho: sem legenda,
+          a lista do processo se confunde com a lista da origem logo acima. */}
+      <p className="daddus-quadro-legenda">
+        Cotacoes lancadas neste processo
+        <span>o que a origem publica fica no Painel de Precos, acima</span>
+      </p>
       <table className="daddus-table cotacoes-table">
         <thead>
           <tr><th>Fonte</th><th>Origem</th><th>Documento</th><th>Data</th><th>Valor unitario</th><th /></tr>
@@ -119,11 +114,11 @@ export function PainelCotacoes({
               <td className="documento">{cotacao.documento || "-"}</td>
               <td>{cotacao.dataCotacao || "-"}</td>
               <td className="valor">
-                {money(cotacao.valorUnitario)}
+                <span className="valor-numero">{money(cotacao.valorUnitario)}</span>
                 {destoantes.has(cotacao.id) && !cotacao.desconsiderada && (
                   <span className="daddus-status yellow" title={`Afasta-se mais de 25% da mediana (${money(mediana)})`}>destoante</span>
                 )}
-                {cotacao.desconsiderada && <small title={cotacao.justificativa}>desconsiderada: {cotacao.justificativa}</small>}
+                {cotacao.desconsiderada && <small>desconsiderada: {cotacao.justificativa}</small>}
               </td>
               <td>
                 {editavel && (
@@ -144,6 +139,7 @@ export function PainelCotacoes({
           )}
         </tbody>
       </table>
+      </div>
 
       {!editavel && motivoBloqueio && (
         <div className="daddus-inline-warning">
