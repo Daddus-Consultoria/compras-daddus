@@ -163,6 +163,7 @@ export function PrecosPublicos({
       )}
 
       {precos !== null && precos.length > 0 && (
+        <div className="daddus-precos-lista">
         <table className="daddus-table precos-table">
           <thead>
             <tr>
@@ -201,6 +202,7 @@ export function PrecosPublicos({
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

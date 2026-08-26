@@ -12,6 +12,7 @@ import type { Sessao } from "@/lib/auth/sessao";
 import {
   ajusteDeQuantidadePermitido,
   ajusteExigeJustificativa,
+  coeficienteVariacao,
   cotacoesEditaveis,
   cotacoesValidas,
   estruturaEditavel,
@@ -19,6 +20,7 @@ import {
   itemPendente,
   itemTotalQuantity,
   loteTotal,
+  medianaDe,
   metodoLabels,
   minimoDeCotacoes,
   money,
@@ -591,6 +593,54 @@ export function ProcessoEditor({
                     {aberto && (
                       <tr className="linha-cotacoes">
                         <td colSpan={secretarias.length + 9}>
+                          {/* A largura da gaveta e a da leitura, nao a da tabela:
+                              o lote cresce com o numero de secretarias e rola de
+                              lado, e sem este limite a gaveta esticava a tabela
+                              alem da tela. `sticky` mantem o painel no lugar
+                              enquanto as colunas de quantidade passam por tras. */}
+                          <div className="daddus-gaveta">
+                          {/* A gaveta abre no meio da tabela do lote, entre duas
+                              linhas de item, e traz outra tabela dentro. Sem
+                              dizer de quem ela e, as duas se confundem — por
+                              isso o cabecalho vem antes de tudo o que a gaveta
+                              mostra, e nao dentro de um dos paineis. */}
+                          <div className="daddus-cotacoes-topo">
+                            <h4>
+                              Cotacoes do item {item.item}
+                              <span>{item.especificacao || "sem especificacao"}</span>
+                            </h4>
+                            {(() => {
+                              const uteis = cotacoesValidas(item);
+                              const fora = item.cotacoes.length - uteis.length;
+                              const dispersao = coeficienteVariacao(item);
+                              return (
+                                <div className="daddus-cotacoes-resumo">
+                                  <span className={`ficha ${uteis.length < minimoDeCotacoes ? "pendente" : ""}`}>
+                                    <strong>{uteis.length} de {minimoDeCotacoes}</strong>
+                                    {uteis.length === 1 ? "cotacao valida" : "cotacoes validas"}
+                                  </span>
+                                  {fora > 0 && (
+                                    <span className="ficha">
+                                      <strong>{fora}</strong>
+                                      {fora === 1 ? "desconsiderada" : "desconsideradas"}
+                                    </span>
+                                  )}
+                                  {uteis.length > 0 && (
+                                    <span className="ficha">
+                                      <strong>{money(medianaDe(uteis.map((cotacao) => cotacao.valorUnitario)))}</strong>
+                                      mediana
+                                    </span>
+                                  )}
+                                  {uteis.length > 1 && (
+                                    <span className={`ficha ${dispersao > 0.25 ? "alerta" : ""}`}>
+                                      <strong>{(dispersao * 100).toFixed(1)}%</strong>
+                                      dispersao
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
                           {podeCotacao && (
                             <PrecosPublicos processoId={processo.id} item={item} aoImportar={criarCotacao} />
                           )}
@@ -603,6 +653,7 @@ export function ProcessoEditor({
                             aoAlterar={alterarCotacao}
                             aoRemover={removerCotacao}
                           />
+                          </div>
                         </td>
                       </tr>
                     )}
