@@ -127,6 +127,22 @@ PY
 CODIGO=$(curl -s -o /tmp/fluxo.json -w "%{http_code}" -b $J/saude.jar -X PUT -H 'Content-Type: application/json' -d @/tmp/lote.json "$BASE/api/processos/$PROC/lote"); CORPO=$(head -c 300 /tmp/fluxo.json)
 etapa 200 "saude lanca a propria quantidade"
 
+# Quem ja fechou e quem falta. Antes da migracao 008 a pergunta so tinha
+# resposta por inferencia (algum numero > 0), que confunde "nao preciso de
+# nada" com "nao entrou no sistema".
+req saude POST "/api/processos/$PROC/lancamento" '{}'
+etapa 200 "saude conclui o proprio lancamento"
+req compras PATCH "/api/processos/$PROC/status" '{"status":"em_cotacao","observacao":""}'
+etapa 422 "compras nao avanca com secretaria pendente e sem motivo"
+
+# Catalogo e precos publicos. O catalogo pode estar vazio (a coleta e separada,
+# `npm run catalogo`, e o db:resetar la em cima apaga tudo), entao aqui se
+# confere o contrato da rota — nao o conteudo.
+req compras GET "/api/catalogo?q=papel"
+etapa 200 "busca no catalogo CATMAT/CATSER responde"
+req compras GET "/api/processos/$PROC/precos?item=1"
+etapa 409 "preco publico exige item vinculado ao catalogo"
+
 echo
 echo "== 6. Pesquisa de precos =="
 req compras PATCH "/api/processos/$PROC/status" '{"status":"em_cotacao","observacao":"Quantidades consolidadas."}'

@@ -377,3 +377,67 @@ button { font: inherit; }
 /* Nas telas de entrada a marca vem por extenso, em preto sobre o cartao claro. */
 .daddus-login-card .daddus-brand { padding: 0; }
 .daddus-login-card .daddus-brand img { height: 42px; width: auto; }
+
+/* Coleta de quantidades: quem ja fechou e quem ainda falta.
+   O painel existe porque a pergunta "posso avancar de fase?" nao tinha resposta
+   na tela — so a matriz de numeros, onde celula vazia tanto pode ser zero
+   lancado quanto secretaria que nunca entrou. Ver db/migrations/008. */
+.daddus-coleta { margin-bottom: 18px; padding: 16px 18px; }
+.daddus-coleta-cabecalho { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
+.daddus-coleta-cabecalho h3 { font-size: 13px; font-weight: 600; margin: 0; }
+.daddus-coleta-cabecalho p { color: var(--muted); font-size: 10px; line-height: 1.6; margin: 5px 0 0; max-width: 62ch; }
+.daddus-coleta-lista { display: grid; gap: 1px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); list-style: none; margin: 14px 0 0; padding: 0; }
+.daddus-coleta-lista li { align-items: center; border-top: 1px solid var(--line); display: flex; font-size: 10px; gap: 7px; padding: 9px 2px; }
+.daddus-coleta-lista li strong { color: #303036; font-size: 10px; font-weight: 600; }
+.daddus-coleta-lista li span { color: var(--muted); flex: 1; font-size: 9px; }
+.daddus-coleta-lista li.concluida > svg { color: var(--green); }
+/* Pendente em cinza, nao em vermelho: falta lancar nao e erro de ninguem
+   enquanto a coleta esta aberta. */
+.daddus-coleta-lista li.pendente > svg { color: #c2c2c8; }
+.daddus-coleta-lista li.pendente strong { color: #65656c; font-weight: 500; }
+.daddus-coleta-lista li .daddus-row-action { font-size: 9px; }
+
+/* Bloqueio explicado. Substitui o aviso comum quando ele seria falso: nao
+   adianta dizer "voce lanca as quantidades da sua secretaria" com todos os
+   campos travados. */
+.daddus-permission-blocked { background: var(--soft-yellow); color: #6b5312; }
+.daddus-permission-blocked .daddus-info-icon { align-items: center; color: var(--yellow); display: flex; }
+
+/* Vinculo do item com o catalogo oficial (CATMAT/CATSER).
+   A coluna existe porque o Painel de Precos consulta por codigo e nunca por
+   descricao — sem o vinculo, nao ha consulta automatica de preco. */
+.daddus-catalogo-celula { align-items: center; display: flex; min-width: 92px; }
+.daddus-catalogo-chip { background: var(--soft-primary); border: 1px solid #efd0d7; border-radius: 3px; color: var(--primary); cursor: pointer; font-size: 9px; font-weight: 600; padding: 4px 6px; white-space: nowrap; }
+.daddus-catalogo-chip:disabled { cursor: default; opacity: .75; }
+.daddus-catalogo-vazio { color: #b6b6bc; }
+.daddus-catalogo-busca { background: #fff; border: 1px solid var(--line); border-radius: 4px; min-width: 330px; padding: 8px; position: relative; z-index: 2; }
+.daddus-catalogo-linha { display: flex; gap: 6px; }
+.daddus-catalogo-linha input { border: 1px solid var(--line); border-radius: 3px; flex: 1; font: inherit; font-size: 10px; outline-color: var(--primary); padding: 5px 6px; }
+.daddus-catalogo-aviso { color: var(--muted); font-size: 9px; line-height: 1.5; margin: 7px 0 0; }
+.daddus-catalogo-resultados { list-style: none; margin: 7px 0 0; max-height: 230px; overflow-y: auto; padding: 0; }
+.daddus-catalogo-resultados li + li { border-top: 1px solid var(--line); }
+.daddus-catalogo-resultados button { background: none; border: 0; cursor: pointer; display: block; padding: 7px 4px; text-align: left; width: 100%; }
+.daddus-catalogo-resultados button:hover { background: var(--soft-primary); }
+.daddus-catalogo-resultados strong { color: var(--primary); display: block; font-size: 9px; }
+.daddus-catalogo-resultados span { color: #45454c; display: block; font-size: 10px; line-height: 1.45; margin-top: 2px; }
+.daddus-catalogo-resultados small { color: var(--muted); display: block; font-size: 8px; margin-top: 3px; }
+
+/* Precos lidos no Painel de Precos, antes de virarem cotacao.
+   Cada linha e importada por um clique: a IN 65/2021 pede analise critica dos
+   precos, e uma cesta montada de enfiada dilui quem responde pelo mapa. */
+.daddus-precos-publicos { background: #fafafa; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 12px; padding: 10px 12px; }
+.daddus-precos-publicos.vazio { color: var(--muted); font-size: 10px; line-height: 1.6; }
+.daddus-precos-publicos.vazio strong { color: #45454c; }
+.daddus-precos-cabecalho { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }
+.daddus-precos-cabecalho > span { color: #45454c; font-size: 10px; }
+.daddus-precos-cabecalho label { align-items: center; color: var(--muted); display: flex; font-size: 9px; gap: 5px; }
+.daddus-precos-cabecalho label input { border: 1px solid var(--line); border-radius: 3px; font: inherit; font-size: 10px; padding: 4px 5px; text-align: center; width: 54px; }
+.daddus-precos-nada { color: var(--muted); font-size: 10px; line-height: 1.6; margin: 9px 0 0; }
+.precos-table { margin-top: 10px; min-width: 620px; }
+.precos-table td.valor { color: var(--primary) !important; font-weight: 600; white-space: nowrap; }
+.precos-table tr.ja-importado td { color: #9a9aa2; }
+.daddus-inline-error { background: var(--soft-danger); border: 1px solid var(--line-danger); border-radius: 4px; color: #8a2733; font-size: 10px; margin-top: 9px; padding: 8px 10px; }
+.precos-table td.unidade-diferente { align-items: center; color: #8a6a1a !important; display: flex; font-weight: 600; gap: 4px; }
+.daddus-catalogo-tipos { display: flex; gap: 4px; margin-bottom: 7px; }
+.daddus-catalogo-tipos button { background: #fff; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); cursor: pointer; font-size: 9px; padding: 4px 8px; }
+.daddus-catalogo-tipos button.ativo { background: var(--soft-primary); border-color: #efd0d7; color: var(--primary); font-weight: 600; }

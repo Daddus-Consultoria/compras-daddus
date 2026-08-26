@@ -219,7 +219,11 @@ export function ExportLicitacaoPDF({
 
   return (
     <button type="button" className="daddus-secondary-button" onClick={exportPdf} disabled={gerando}>
-      <FileDown size={16} /> {gerando ? "Gerando..." : "Exportar PDF oficial"}
+      {/* O botao chama o documento pelo nome que ele tem no processo: o proprio
+          PDF se intitula "MAPA DE PESQUISA DE PRECOS" e o arquivo sai como
+          mapa-de-precos-<processo>.pdf. "Exportar PDF oficial" dizia o formato,
+          e nao a peca — quem procura o mapa procura por "mapa". */}
+      <FileDown size={16} /> {gerando ? "Gerando..." : "Mapa de precos"}
     </button>
   );
 }

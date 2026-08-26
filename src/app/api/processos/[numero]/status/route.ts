@@ -1,7 +1,8 @@
 import { podeEditarTodasAsColunas, podeOperarCpl } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { metodoLabels, money, podeMoverParaFase, processoStatusLabels, transicoesDeStatus, type MetodoPreco, type ProcessoStatus } from "@/lib/compras";
+import { metodoLabels, money, podeMoverParaFase, processoStatusLabels, situacaoDoLancamento, transicoesDeStatus, type MetodoPreco, type ProcessoStatus } from "@/lib/compras";
 import { alterarStatus, definirMetodo, lerProcesso } from "@/lib/repositorio/processos";
+import { listarSecretarias } from "@/lib/repositorio/secretarias";
 import { NextResponse } from "next/server";
 
 /**
@@ -52,6 +53,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ nu
         );
       }
       if (novo !== processo.status) {
+        /**
+         * Sair da coleta com secretaria pendente e possivel, mas nao em
+         * silencio: quem fica de fora do lote nao aparece depois, e o mapa sai
+         * com uma quantidade menor do que a prefeitura precisa. Uma secretaria
+         * pode legitimamente nao ter o que pedir — por isso a saida existe, e
+         * por isso ela pede o motivo por escrito, que fica no historico da fase.
+         */
+        if (processo.status === "coleta_quantidades" && novo === "em_cotacao") {
+          const situacao = situacaoDoLancamento(processo, await listarSecretarias(sessao.prefeituraId));
+          const observacao = String(corpo.observacao ?? "").trim();
+          if (situacao.pendentes.length && observacao.length < 10) {
+            const nomes = situacao.pendentes.map((secretaria) => secretaria.nome).join(", ");
+            return NextResponse.json(
+              {
+                error: `${situacao.pendentes.length} de ${situacao.total} secretaria(s) ainda nao concluiram o lancamento: ${nomes}. `
+                  + "Para seguir assim mesmo, registre o motivo (ao menos 10 caracteres) na observacao da mudanca de fase.",
+                pendentes: situacao.pendentes.map((secretaria) => secretaria.nome),
+              },
+              { status: 422 },
+            );
+          }
+        }
         if (!podeMoverParaFase(sessao.papel, novo)) {
           return NextResponse.json(
             { error: `"${processoStatusLabels[novo]}" e registrada pela CPL, na tramitacao do processo.` },

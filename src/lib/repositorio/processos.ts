@@ -1,4 +1,4 @@
-import type { AjusteQuantidade, Cotacao, LoteItem, MetodoPreco, Processo, ProcessoStatus, Secretaria } from "@/lib/compras";
+import type { AjusteQuantidade, Cotacao, LancamentoSecretaria, LoteItem, MetodoPreco, Processo, ProcessoStatus, Secretaria } from "@/lib/compras";
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
 
 type LinhaProcesso = {
@@ -13,6 +13,7 @@ type LinhaProcesso = {
   metodo_preco: MetodoPreco;
   justificativa_metodo: string;
   atualizado_em: string;
+  lancamentos: LancamentoSecretaria[] | null;
 };
 
 type LinhaItem = {
@@ -23,6 +24,9 @@ type LinhaItem = {
   quantidades: Record<string, number>;
   cotacoes: Cotacao[];
   ajustes: AjusteQuantidade[];
+  codigo_catalogo: number | null;
+  catalogo_tipo: "material" | "servico" | null;
+  catalogo_descricao: string | null;
 };
 
 // As datas sao formatadas no proprio Postgres para nao dependerem do fuso do servidor.
@@ -31,12 +35,22 @@ const selecaoProcesso = `
          to_char(p.prazo_limite, 'DD/MM/YYYY') as prazo_limite,
          p.status, sec.chave as secretaria_solicitante, p.responsavel, p.notas_processo,
          p.metodo_preco, p.justificativa_metodo,
-         to_char(p.atualizado_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as atualizado_em
+         to_char(p.atualizado_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as atualizado_em,
+         coalesce((select jsonb_agg(jsonb_build_object(
+                     'secretaria', s.chave,
+                     'concluidoPor', u.nome,
+                     'concluidoEm', to_char(l.concluido_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI'))
+                     order by l.concluido_em)
+                   from lancamentos_quantidade l
+                   join secretarias s on s.id = l.secretaria_id
+                   left join usuarios u on u.id = l.concluido_por_id
+                   where l.processo_id = p.id), '[]'::jsonb) as lancamentos
   from processos_compra p
   left join secretarias sec on sec.id = p.secretaria_solicitante_id`;
 
 const selecaoItens = `
   select i.processo_id, i.numero_item, i.especificacao, i.unidade,
+         i.codigo_catalogo, i.catalogo_tipo, i.catalogo_descricao,
          coalesce((select jsonb_object_agg(s.chave, q.quantidade)
                    from item_quantidades q join secretarias s on s.id = q.secretaria_id
                    where q.item_id = i.id), '{}'::jsonb) as quantidades,
@@ -85,6 +99,13 @@ function paraItem(linha: LinhaItem, chaves: string[]): LoteItem {
     unidade: linha.unidade,
     quantidades,
     cotacoes,
+    catalogo: linha.codigo_catalogo && linha.catalogo_tipo
+      ? {
+          codigo: linha.codigo_catalogo,
+          tipo: linha.catalogo_tipo,
+          descricao: linha.catalogo_descricao ?? "",
+        }
+      : null,
   };
 }
 
@@ -101,6 +122,7 @@ function paraProcesso(linha: LinhaProcesso, itens: LoteItem[]): Processo {
     atualizadoEm: linha.atualizado_em,
     notas: linha.notas_processo,
     itens,
+    lancamentos: linha.lancamentos ?? [],
   };
 }
 
@@ -148,6 +170,7 @@ export async function salvarLote(
   dados: { notas: string; itens: LoteItem[] },
   autorId: number | null = null,
   ajustes: { justificativa: string; mudancas: AjusteRegistrado[] } | null = null,
+  secretariaDoAutor: string | null = null,
 ) {
   return emTransacao(async (executar) => {
     // O filtro por prefeitura no proprio UPDATE e o que impede uma prefeitura
@@ -166,23 +189,45 @@ export async function salvarLote(
       dados.itens.map((item) => item.item),
     ]);
 
+    // Chaves cujo numero realmente mudou neste salvamento — usadas no fim para
+    // reabrir o lancamento de quem mexeu na propria quantidade.
+    const mexidas = new Set<string>();
+
     for (const item of dados.itens) {
       const [linha] = (await executar(
-        `insert into itens_lote (processo_id, numero_item, especificacao, unidade) values ($1, $2, $3, $4)
+        `insert into itens_lote (processo_id, numero_item, especificacao, unidade, codigo_catalogo, catalogo_tipo, catalogo_descricao)
+         values ($1, $2, $3, $4, $5, $6, $7)
          on conflict (processo_id, numero_item)
-         do update set especificacao = excluded.especificacao, unidade = excluded.unidade
+         do update set especificacao = excluded.especificacao, unidade = excluded.unidade,
+                       codigo_catalogo = excluded.codigo_catalogo,
+                       catalogo_tipo = excluded.catalogo_tipo,
+                       catalogo_descricao = excluded.catalogo_descricao
          returning id`,
-        [processo.id, item.item, item.especificacao, item.unidade],
+        [
+          processo.id, item.item, item.especificacao, item.unidade,
+          item.catalogo?.codigo ?? null,
+          item.catalogo?.tipo ?? null,
+          item.catalogo?.descricao ?? null,
+        ],
       )) as Array<{ id: number }>;
 
       for (const secretaria of secretarias) {
-        await executar(
+        // O `where` no final e o que preserva a autoria. Sem ele, salvar o lote
+        // por qualquer motivo — corrigir uma especificacao, por exemplo —
+        // recarimbava `atualizado_por_id` de TODAS as secretarias com quem
+        // salvou, apagando justamente o que a migracao 001 diz que esta tabela
+        // existe para guardar: "saber quem preencheu o que". A linha so muda de
+        // dono quando o numero dela muda.
+        const [alterada] = (await executar(
           `insert into item_quantidades (item_id, secretaria_id, quantidade, atualizado_por_id)
            values ($1, $2, $3, $4)
            on conflict (item_id, secretaria_id)
-           do update set quantidade = excluded.quantidade, atualizado_por_id = excluded.atualizado_por_id, atualizado_em = now()`,
+           do update set quantidade = excluded.quantidade, atualizado_por_id = excluded.atualizado_por_id, atualizado_em = now()
+           where item_quantidades.quantidade is distinct from excluded.quantidade
+           returning secretaria_id`,
           [linha.id, secretaria.id, Number(item.quantidades[secretaria.chave] ?? 0), autorId],
-        );
+        )) as Array<{ secretaria_id: number }>;
+        if (alterada) mexidas.add(secretaria.chave);
       }
 
     }
@@ -198,8 +243,72 @@ export async function salvarLote(
         );
       }
     }
+
+    /**
+     * A secretaria que mexe no proprio numero depois de ter concluido volta a
+     * constar como pendente: "concluido" quer dizer "este e o meu numero
+     * final", e editar desfaz a afirmacao. Ela reconclui com um clique.
+     *
+     * So vale para a propria secretaria. Quando o Setor de Compras corrige o
+     * numero de alguem, a correcao ja fica registrada em ajustes_quantidade,
+     * com justificativa, e aparece no mapa — reabrir o lancamento ali so faria
+     * o processo cobrar de novo uma secretaria que ja fez a parte dela.
+     */
+    if (secretariaDoAutor && mexidas.has(secretariaDoAutor)) {
+      await executar(
+        `delete from lancamentos_quantidade l
+         using secretarias s
+         where l.processo_id = $1 and l.secretaria_id = s.id
+           and s.prefeitura_id = $2 and s.chave = $3`,
+        [processo.id, prefeituraId, secretariaDoAutor],
+      );
+    }
+
     return true;
   });
+}
+
+/**
+ * A secretaria declara que terminou de lancar as quantidades dela.
+ *
+ * O `on conflict do nothing` guarda a primeira conclusao: se duas pessoas da
+ * mesma secretaria clicarem, quem assinou foi a primeira, e o registro nao
+ * deveria trocar de dono por causa de um clique repetido.
+ */
+export async function concluirLancamento(
+  prefeituraId: number,
+  numero: string,
+  secretariaChave: string,
+  usuarioId: number | null,
+) {
+  const linha = await consultarUm<{ processo_id: number }>(
+    `insert into lancamentos_quantidade (processo_id, secretaria_id, concluido_por_id)
+     select p.id, s.id, $4
+     from processos_compra p, secretarias s
+     where p.prefeitura_id = $1 and p.numero_processo = $2
+       and s.prefeitura_id = $1 and s.chave = $3
+     on conflict (processo_id, secretaria_id) do nothing
+     returning processo_id`,
+    [prefeituraId, numero, secretariaChave, usuarioId],
+  );
+  // Sem linha: ou ja estava concluido (do nothing), ou processo/secretaria nao
+  // existem nesta prefeitura. Quem separa os dois casos e a rota, que ja leu o
+  // processo antes de chamar.
+  return Boolean(linha);
+}
+
+/** Desfaz a conclusao, para a secretaria corrigir o que lancou. */
+export async function reabrirLancamento(prefeituraId: number, numero: string, secretariaChave: string) {
+  const linha = await consultarUm<{ processo_id: number }>(
+    `delete from lancamentos_quantidade l
+     using processos_compra p, secretarias s
+     where l.processo_id = p.id and l.secretaria_id = s.id
+       and p.prefeitura_id = $1 and p.numero_processo = $2
+       and s.prefeitura_id = $1 and s.chave = $3
+     returning l.processo_id`,
+    [prefeituraId, numero, secretariaChave],
+  );
+  return Boolean(linha);
 }
 
 type DadosCotacao = {

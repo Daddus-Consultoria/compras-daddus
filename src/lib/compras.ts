@@ -74,6 +74,20 @@ export const metodoLabels: Record<MetodoPreco, string> = {
   menor: "Menor preco obtido",
 };
 
+/**
+ * O item do lote amarrado ao catalogo oficial (CATMAT/CATSER).
+ *
+ * E o que torna possivel consultar preco publicado: a API do Painel de Precos
+ * consulta por codigo, nunca por texto. A descricao vem junto e fica gravada —
+ * e o texto do catalogo no momento da escolha, e o processo precisa continuar
+ * dizendo o que foi escolhido mesmo que o catalogo oficial mude depois.
+ */
+export type VinculoCatalogo = {
+  codigo: number;
+  tipo: "material" | "servico";
+  descricao: string;
+};
+
 export type LoteItem = {
   id: string;
   item: number;
@@ -82,6 +96,7 @@ export type LoteItem = {
   quantidades: Record<string, number>;
   cotacoes: Cotacao[];
   ajustes?: AjusteQuantidade[];
+  catalogo?: VinculoCatalogo | null;
 };
 
 /** Diferencas entre o que esta gravado e o que a tela quer gravar. */
@@ -166,6 +181,17 @@ export const solicitacaoStatusLabels: Record<SolicitacaoStatus, string> = {
   recusado: "Recusado",
 };
 
+/**
+ * Uma secretaria declarando que terminou de lancar as quantidades dela neste
+ * processo. Ver db/migrations/008: o fim do lancamento e declarado, e nao
+ * deduzido de haver algum numero maior que zero.
+ */
+export type LancamentoSecretaria = {
+  secretaria: Secretaria;
+  concluidoPor: string | null;
+  concluidoEm: string;
+};
+
 export type Processo = {
   id: string;
   objeto: string;
@@ -178,7 +204,31 @@ export type Processo = {
   atualizadoEm: string;
   notas: string;
   itens: LoteItem[];
+  lancamentos: LancamentoSecretaria[];
 };
+
+/**
+ * Divide as secretarias entre as que ja concluiram o lancamento e as que ainda
+ * devem, para a coleta de quantidades.
+ *
+ * Secretaria desativada fica de fora das duas listas: ela nao lanca mais nada,
+ * entao cobra-la seria prender o processo num pendente que ninguem pode
+ * resolver. O historico dela continua no lote, no numero que ja estava gravado.
+ */
+export function situacaoDoLancamento(
+  processo: Pick<Processo, "lancamentos">,
+  secretarias: SecretariaInfo[],
+) {
+  const porChave = new Map(processo.lancamentos.map((lancamento) => [lancamento.secretaria, lancamento]));
+  const ativas = secretarias.filter((secretaria) => secretaria.ativa);
+
+  return {
+    concluidas: ativas.filter((secretaria) => porChave.has(secretaria.chave)),
+    pendentes: ativas.filter((secretaria) => !porChave.has(secretaria.chave)),
+    lancamentoDe: (chave: Secretaria) => porChave.get(chave) ?? null,
+    total: ativas.length,
+  };
+}
 
 /** Secretarias com que uma prefeitura nova comeca; depois ela edita a vontade. */
 export const secretariasPadrao = [
@@ -231,6 +281,12 @@ export const demoProcessos: Processo[] = [
     responsavel: "Marina Alves",
     atualizadoEm: "Hoje, 14:32",
     notas: "",
+    lancamentos: [
+      { secretaria: "educacao", concluidoPor: "Rita Campos", concluidoEm: "14/08/2026 16:20" },
+      { secretaria: "saude", concluidoPor: "Paulo Nunes", concluidoEm: "14/08/2026 16:20" },
+      { secretaria: "assistencia", concluidoPor: "Ines Prado", concluidoEm: "14/08/2026 16:20" },
+      { secretaria: "administracao", concluidoPor: "Marina Alves", concluidoEm: "14/08/2026 16:20" },
+    ],
     itens: [
       {
         id: "0142-1", item: 1, especificacao: "Papel sulfite A4, branco, 75 g/m2, pacote com 500 folhas", unidade: "PCT",
@@ -272,6 +328,12 @@ export const demoProcessos: Processo[] = [
     responsavel: "Marina Alves",
     atualizadoEm: "Ontem, 09:15",
     notas: "",
+    lancamentos: [
+      { secretaria: "saude", concluidoPor: "Paulo Nunes", concluidoEm: "11/08/2026 10:05" },
+      { secretaria: "assistencia", concluidoPor: "Ines Prado", concluidoEm: "11/08/2026 15:48" },
+      { secretaria: "educacao", concluidoPor: "Rita Campos", concluidoEm: "12/08/2026 09:12" },
+      { secretaria: "administracao", concluidoPor: "Marina Alves", concluidoEm: "12/08/2026 11:30" },
+    ],
     itens: [
       {
         id: "0138-1", item: 1, especificacao: "Dipirona sodica 500 mg, comprimido, caixa com 200 unidades", unidade: "CX",
@@ -322,6 +384,7 @@ export const demoProcessos: Processo[] = [
     responsavel: "Marina Alves",
     atualizadoEm: "18/08/2026, 16:40",
     notas: "",
+    lancamentos: [],
     itens: [
       {
         id: "0129-1", item: 1, especificacao: "Troca de oleo do motor com substituicao de filtro, veiculo leve", unidade: "SV",

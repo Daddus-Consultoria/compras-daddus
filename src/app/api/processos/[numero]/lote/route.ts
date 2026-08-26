@@ -73,6 +73,24 @@ export async function PUT(request: Request, { params }: { params: Promise<{ nume
     if (!compras && !sessao.secretariaChave) {
       return NextResponse.json({ error: "Seu usuario nao esta vinculado a uma secretaria." }, { status: 403 });
     }
+    // Vinculo existente nao basta: a chave precisa ser de uma secretaria viva
+    // desta prefeitura. Sem esta checagem, um vinculo orfao (secretaria
+    // renomeada, chave antiga) passava daqui e ia morrer adiante em
+    // `colunasLiberadas` sem coluna nenhuma — o pedido voltava 200 e nada era
+    // gravado, que e a pior das respostas possiveis.
+    const minha = compras ? null : secretarias.find((secretaria) => secretaria.chave === sessao.secretariaChave);
+    if (!compras && !minha) {
+      return NextResponse.json(
+        { error: `Seu usuario esta vinculado a secretaria "${sessao.secretariaChave}", que nao existe nesta prefeitura. Peca ao administrador para corrigir o vinculo.` },
+        { status: 403 },
+      );
+    }
+    if (minha && !minha.ativa) {
+      return NextResponse.json(
+        { error: `A Secretaria de ${minha.nome} esta desativada e nao lanca novas quantidades. Peca ao administrador para reativa-la.` },
+        { status: 403 },
+      );
+    }
 
     // As colunas que a pessoa pode mexer nesta fase; as demais vem do que esta gravado.
     const colunasLiberadas: Secretaria[] = !podeQuantidade
@@ -134,7 +152,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ nume
 
     // As notas do processo pertencem ao Setor de Compras.
     const notas = compras ? enviado.notas : atual.notas;
-    const gravou = await salvarLote(sessao.prefeituraId, numero, { notas, itens }, sessao.id || null, ajustes);
+    const gravou = await salvarLote(sessao.prefeituraId, numero, { notas, itens }, sessao.id || null, ajustes, compras ? null : sessao.secretariaChave);
     if (!gravou) return NextResponse.json({ error: `Processo ${numero} nao encontrado.` }, { status: 404 });
     return NextResponse.json({ ok: true, itens: itens.length, ajustes: ajustes?.mudancas.length ?? 0 });
   } catch (erro) {
