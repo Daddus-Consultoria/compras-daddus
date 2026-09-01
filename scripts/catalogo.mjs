@@ -75,7 +75,7 @@ async function buscar(rota, pagina) {
 }
 
 async function gravar(tipo, itens) {
-  if (!itens.length) return 0;
+  if (!itens.length) return;
   // Um INSERT por lote de pagina, com os valores achatados: 500 statements
   // separados por pagina fariam a coleta durar mais que o download.
   const colunas = 10;
@@ -104,9 +104,6 @@ async function gravar(tipo, itens) {
        ativo = excluded.ativo, coletado_em = now()`,
     valores,
   );
-  // Distintos, e nao o tamanho da pagina: o CATSER repete o mesmo codigo em
-  // ramos diferentes da classificacao (3.096 linhas para 3.000 servicos).
-  return new Set(itens.map((item) => item.codigo)).size;
 }
 
 const pedidos = process.argv.slice(2).filter((arg) => arg in FONTES);
@@ -117,7 +114,12 @@ for (const tipo of tipos) {
   const fonte = FONTES[tipo];
   console.log(`\n${tipo}: coletando de ${fonte.rota}`);
   let pagina = 1;
-  let gravados = 0;
+  // Codigos distintos da coleta inteira, e nao a soma das paginas: o CATSER
+  // repete o mesmo codigo em ramos diferentes da classificacao (3.096 linhas
+  // para 3.000 servicos), e a repeticao atravessa a virada de pagina. Somar o
+  // distinto de cada pagina contava o mesmo item duas vezes e anunciava no fim
+  // mais itens do que o banco tem.
+  const codigos = new Set();
   let total = null;
 
   while (pagina <= limite) {
@@ -140,16 +142,21 @@ for (const tipo of tipos) {
     // Item sem codigo ou sem descricao nao serve para buscar nem para consultar
     // preco; entra so o que tem as duas coisas.
     const itens = linhas.map(fonte.mapear).filter((item) => item.codigo && item.descricao);
-    gravados += await gravar(tipo, itens);
+    // Um codigo repetido dentro do mesmo INSERT faria o ON CONFLICT DO UPDATE
+    // tocar a mesma linha duas vezes, o que o Postgres recusa; fica a ultima
+    // ocorrencia, que e a que o UPDATE deixaria de qualquer forma.
+    const unicos = [...new Map(itens.map((item) => [item.codigo, item])).values()];
+    await gravar(tipo, unicos);
+    unicos.forEach((item) => codigos.add(item.codigo));
 
     if (pagina % 25 === 0 || linhas.length < TAMANHO) {
-      console.log(`  ${gravados.toLocaleString("pt-BR")} gravados (pagina ${pagina})`);
+      console.log(`  ${codigos.size.toLocaleString("pt-BR")} gravados (pagina ${pagina})`);
     }
     if (linhas.length < TAMANHO) break;
     pagina += 1;
   }
 
-  console.log(`  ${tipo}: ${gravados.toLocaleString("pt-BR")} itens no banco`);
+  console.log(`  ${tipo}: ${codigos.size.toLocaleString("pt-BR")} itens distintos coletados`);
 }
 
 const { rows } = await cliente.query("select tipo, count(*)::int as total from catalogo_itens group by tipo order by tipo");
