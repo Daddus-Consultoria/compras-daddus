@@ -132,6 +132,14 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     if (resultado.erro === "nao-encontrado") {
       return NextResponse.json({ error: `Contrato ${numero} nao encontrado.` }, { status: 404 });
     }
+    if (resultado.erro === "com-empenhos") {
+      return NextResponse.json(
+        {
+          error: `O contrato ${numero} tem ${resultado.empenhos} ${resultado.empenhos === 1 ? "nota de empenho emitida" : "notas de empenho emitidas"} e nao pode ser excluido.`,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       {
         error: `O contrato ${numero} tem ${resultado.pedidos} ${resultado.pedidos === 1 ? "pedido de fornecimento" : "pedidos de fornecimento"} registrados e nao pode ser excluido.`,

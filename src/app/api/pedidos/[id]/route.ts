@@ -1,4 +1,4 @@
-import { podeConferirPedido, podeVerPedidos } from "@/lib/auth/papeis";
+import { podeConferirPedido, podeRegistrarEmpenho, podeVerPedidos } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
 import { dataBrValida } from "@/lib/compras";
 import { contratoStatusLabels } from "@/lib/contratos";
@@ -39,10 +39,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 /**
- * Conferir, devolver, autorizar, recusar, cancelar ou estornar. Cada ato tem um
- * dono: a conferencia e do Setor de Compras, a autorizacao e do ordenador — o
- * secretario da pasta ate a alcada da prefeitura, o gabinete acima dela — e o
- * cancelamento e a retirada da secretaria que abriu.
+ * Conferir, empenhar, trocar a nota, devolver, autorizar, recusar, cancelar ou
+ * estornar. Cada ato tem um dono: a conferencia e o registro do empenho sao do
+ * Setor de Compras, a autorizacao e do ordenador — o secretario da pasta ate a
+ * alcada da prefeitura, o gabinete acima dela — e o cancelamento e a retirada
+ * da secretaria que abriu.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -77,6 +78,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   );
   const contexto: ContextoDeAcao = {
     confere: podeConferirPedido(sessao.papel),
+    empenha: podeRegistrarEmpenho(sessao.papel),
     autoriza: impedimento === null,
     daPropriaSecretaria: sessao.papel === "secretario" && pedido.secretaria === sessao.secretariaChave,
   };
@@ -101,10 +103,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   try {
+    const empenhoId = Number(corpo.empenhoId);
     const resultado = await decidirPedido(sessao.prefeituraId, Number(id), sessao.id || null, {
       acao,
       motivo,
-      empenho: String(corpo.empenho ?? "").trim(),
+      empenhoId: Number.isInteger(empenhoId) && empenhoId > 0 ? empenhoId : null,
       entregaPrevista: entregaPrevista || null,
     });
     if (resultado.erro === "pedido-nao-encontrado") {
@@ -125,6 +128,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           error: rotulo
             ? `O contrato ${pedido.contrato} esta ${rotulo.toLowerCase()}: reative-o antes de autorizar o fornecimento.`
             : `Contrato ${pedido.contrato} nao encontrado.`,
+        },
+        { status: 409 },
+      );
+    }
+    if (resultado.erro === "empenho-nao-informado") {
+      return NextResponse.json({ error: "Escolha a nota de empenho da despesa." }, { status: 400 });
+    }
+    if (resultado.erro === "empenho-nao-encontrado") {
+      return NextResponse.json({ error: "Nota de empenho nao encontrada nesta prefeitura." }, { status: 404 });
+    }
+    if (resultado.erro === "empenho-de-outro-contrato") {
+      return NextResponse.json(
+        { error: `A nota escolhida foi emitida contra outro contrato: o pedido e do contrato ${pedido.contrato}.` },
+        { status: 409 },
+      );
+    }
+    if (resultado.erro === "empenho-sem-saldo") {
+      return NextResponse.json(
+        {
+          error: `A nota ${resultado.numero} nao cobre este pedido: ${dinheiro(resultado.pedido!)} pedidos, ${dinheiro(resultado.disponivel!)} de saldo na nota.`,
         },
         { status: 409 },
       );
@@ -154,5 +177,10 @@ function vetoDe(acao: AcaoPedido, impedimento: ReturnType<typeof impedimentoPara
     return impedimento ? impedimentoLabels[impedimento] : "Seu perfil nao decide a despesa deste pedido.";
   }
   if (acao === "cancelar") return "Cancelar o pedido cabe a secretaria que o abriu.";
+  if (acao === "empenhar" || acao === "corrigir-empenho") {
+    return "Registrar e trocar a nota de empenho e do Setor de Compras.";
+  }
   return `Conferir e devolver sao do Setor de Compras: seu perfil nao pode ${acoesDoPedido[acao].label.toLowerCase()} um pedido.`;
 }
+
+const dinheiro = (valor: number) => valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

@@ -16,6 +16,7 @@ import {
   type ContratoStatus,
   type ItemContrato,
 } from "@/lib/contratos";
+import type { Empenho } from "@/lib/empenhos";
 import type { Pedido, SaldoItem } from "@/lib/pedidos";
 import { AlertTriangle, ArrowLeft, Check, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -43,11 +44,13 @@ export function ContratoEditor({
   contrato,
   saldo,
   pedidos,
+  empenhos,
   sessao,
 }: {
   contrato: Contrato;
   saldo: SaldoItem[];
   pedidos: Pedido[];
+  empenhos: Empenho[];
   sessao: Sessao;
 }) {
   const router = useRouter();
@@ -271,7 +274,7 @@ export function ContratoEditor({
         </div>
       </div>
 
-      <SaldoDoContrato saldo={saldo} pedidos={pedidos} />
+      <SaldoDoContrato saldo={saldo} pedidos={pedidos} empenhos={empenhos} />
     </AppShell>
   );
 }

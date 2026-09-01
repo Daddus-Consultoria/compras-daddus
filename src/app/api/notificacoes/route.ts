@@ -1,5 +1,5 @@
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { obterContratos, obterPedidos, obterProcessos, obterRegrasDeAutorizacao, obterSituacaoDosEtps } from "@/lib/dados";
+import { obterContratos, obterEmpenhos, obterPedidos, obterProcessos, obterRegrasDeAutorizacao, obterSituacaoDosEtps } from "@/lib/dados";
 import { montarNotificacoes } from "@/lib/notificacoes";
 import { esquecerNotificacoes, lerNotificacoesLidas, marcarNotificacoesLidas } from "@/lib/repositorio/notificacoes";
 import { listarSolicitacoes } from "@/lib/repositorio/solicitacoes";
@@ -12,11 +12,12 @@ export async function GET() {
 
   const semBanco = modoDemonstracao() || !sessao.id || sessao.prefeituraId === null;
   try {
-    const [{ processos }, { contratos }, { pedidos }, etps, regras] = await Promise.all([
+    const [{ processos }, { contratos }, { pedidos }, { empenhos }, etps, regras] = await Promise.all([
       obterProcessos(sessao.prefeituraId),
       obterContratos(sessao.prefeituraId),
       // O secretario so e avisado do que a propria secretaria pediu.
       obterPedidos(sessao.prefeituraId, { secretaria: sessao.papel === "secretario" ? sessao.secretariaChave : null }),
+      obterEmpenhos(sessao.prefeituraId),
       obterSituacaoDosEtps(sessao.prefeituraId),
       obterRegrasDeAutorizacao(sessao.prefeituraId),
     ]);
@@ -39,6 +40,7 @@ export async function GET() {
       solicitacoes,
       tarefas,
       pedidos,
+      empenhos,
       contratos,
       etps,
       lidas,

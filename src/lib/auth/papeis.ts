@@ -15,7 +15,7 @@ export const papelLabels: Record<Papel, string> = {
 export const papelDescricoes: Record<Papel, string> = {
   superadmin: "Equipe Daddus. Cria prefeituras e usuarios de qualquer municipio.",
   admin: "Cria e desativa usuarios da propria prefeitura e edita os dados institucionais.",
-  compras: "Monta processos, lotes e cotacoes da prefeitura, cadastra os contratos e confere os pedidos de fornecimento antes do ordenador.",
+  compras: "Monta processos, lotes e cotacoes da prefeitura, cadastra os contratos, confere os pedidos de fornecimento e registra a nota de empenho emitida pela Financa.",
   cpl: "Recebe o mapa de precos, registra a tramitacao e devolve o processo com o contrato.",
   secretario: "Abre solicitacoes, preenche a quantidade da propria secretaria e pede fornecimento nos contratos. Marcado como ordenador, autoriza a despesa da propria pasta.",
   gabinete: "Ordenador geral. Autoriza a despesa que passa da alcada dos secretarios e acompanha a prefeitura inteira.",
@@ -109,6 +109,16 @@ export function podeAbrirPedido(papel: Papel) {
  * contrato. E instrucao, nao decisao — o "autorizo" e do ordenador.
  */
 export function podeConferirPedido(papel: Papel) {
+  return papel === "compras";
+}
+
+/**
+ * Registrar a nota de empenho. Quem emite e a Financa, fora do portal; o Setor
+ * de Compras registra o numero emitido e amarra o pedido a ele. Separado de
+ * `podeConferirPedido` de proposito: sao o mesmo perfil hoje, e sao dois atos
+ * diferentes — o dia em que a Financa entrar no portal, muda so esta funcao.
+ */
+export function podeRegistrarEmpenho(papel: Papel) {
   return papel === "compras";
 }
 

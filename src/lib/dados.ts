@@ -3,9 +3,11 @@ import { modoDemonstracao } from "@/lib/auth/sessao";
 import { acharContratoDemo, contratosDemo } from "@/lib/contratos";
 import { lerContrato, listarContratos } from "@/lib/repositorio/contratos";
 import { acharDfdDemo, dfdsDemo } from "@/lib/dfd";
+import { empenhosDemo } from "@/lib/empenhos";
 import { etpVazio } from "@/lib/etp";
 import { pedidosDemo, saldoDemo, totalContratado, totalExecutado } from "@/lib/pedidos";
 import { dfdDoProcesso, lerDfd, listarDfds } from "@/lib/repositorio/dfd";
+import { listarEmpenhos } from "@/lib/repositorio/empenhos";
 import { lerEtp, situacaoDosEtps } from "@/lib/repositorio/etp";
 import { listarPedidos, resumoDeSaldos, saldoDoContrato, type ResumoSaldo } from "@/lib/repositorio/pedidos";
 import { regrasDeAutorizacao } from "@/lib/repositorio/prefeituras";
@@ -100,6 +102,20 @@ export async function obterPedidos(
     };
   } catch {
     return { origem: "memoria" as OrigemDados, pedidos: filtrarDemo() };
+  }
+}
+
+/**
+ * Notas de empenho da prefeitura, com o saldo de cada uma. Sem banco, a nota
+ * de exemplo — a tela precisa mostrar como o vinculo aparece.
+ */
+export async function obterEmpenhos(prefeituraId: number | null, contrato: string | null = null) {
+  const demo = () => (contrato ? empenhosDemo.filter((empenho) => empenho.contrato === contrato) : empenhosDemo);
+  if (modoDemonstracao() || prefeituraId === null) return { origem: "memoria" as OrigemDados, empenhos: demo() };
+  try {
+    return { origem: "postgres" as OrigemDados, empenhos: await listarEmpenhos(prefeituraId, { contrato }) };
+  } catch {
+    return { origem: "memoria" as OrigemDados, empenhos: demo() };
   }
 }
 

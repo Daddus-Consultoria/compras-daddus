@@ -1,6 +1,6 @@
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
 import type { ContratoStatus } from "@/lib/contratos";
-import { acoesDoPedido, ehDecisao, type AcaoPedido, type Pedido, type PedidoStatus, type SaldoItem } from "@/lib/pedidos";
+import { acoesDoPedido, mexeNoEmpenho, type AcaoPedido, type Pedido, type PedidoStatus, type SaldoItem } from "@/lib/pedidos";
 import { paraDataIso } from "@/lib/repositorio/processos";
 
 type LinhaPedido = Omit<Pedido, "itens"> & { itens: Pedido["itens"] };
@@ -10,7 +10,8 @@ type LinhaPedido = Omit<Pedido, "itens"> & { itens: Pedido["itens"] };
 const selecao = `
   select p.id, p.numero, c.numero as contrato, c.fornecedor,
          sec.chave as secretaria, sec.nome as "secretariaNome",
-         p.justificativa, p.status, p.empenho,
+         p.justificativa, p.status,
+         coalesce(emp.numero, '') as empenho, p.empenho_id as "empenhoId",
          to_char(p.entrega_prevista, 'DD/MM/YYYY') as "entregaPrevista",
          p.motivo_decisao as "motivoDecisao",
          autor.nome as solicitante,
@@ -35,6 +36,7 @@ const selecao = `
   from pedidos_fornecimento p
   join contratos c on c.id = p.contrato_id
   join secretarias sec on sec.id = p.secretaria_id
+  left join empenhos emp on emp.id = p.empenho_id
   left join usuarios autor on autor.id = p.criado_por_id
   left join usuarios conferente on conferente.id = p.conferido_por_id
   left join usuarios decisor on decisor.id = p.decidido_por_id`;
@@ -281,7 +283,8 @@ export async function criarPedido(prefeituraId: number, usuarioId: number | null
 export type DadosDecisao = {
   acao: AcaoPedido;
   motivo: string;
-  empenho: string;
+  /** Nota de empenho a vincular; usado por `empenhar` e `corrigir-empenho`. */
+  empenhoId: number | null;
   entregaPrevista: string | null;
 };
 
@@ -298,13 +301,15 @@ export async function decidirPedido(prefeituraId: number, id: number, usuarioId:
   const regra = acoesDoPedido[dados.acao];
   return emTransacao(async (executar) => {
     const [pedido] = (await executar(
-      `select p.id, p.status, p.secretaria_id, c.numero as contrato, c.status as contrato_status
+      `select p.id, p.status, p.secretaria_id, p.empenho_id, c.numero as contrato, c.status as contrato_status
        from pedidos_fornecimento p join contratos c on c.id = p.contrato_id
        where p.prefeitura_id = $1 and p.id = $2 for update of p`,
       [prefeituraId, id],
-    )) as Array<{ id: number; status: PedidoStatus; secretaria_id: number; contrato: string; contrato_status: ContratoStatus }>;
+    )) as Array<{ id: number; status: PedidoStatus; secretaria_id: number; empenho_id: number | null; contrato: string; contrato_status: ContratoStatus }>;
     if (!pedido) return { erro: "pedido-nao-encontrado" as const };
     if (!regra.origens.includes(pedido.status)) return { erro: "acao-incompativel" as const, status: pedido.status };
+
+    const destino = regra.destino ?? pedido.status;
 
     if (dados.acao === "autorizar") {
       const contrato = await contratoTravado(executar, prefeituraId, pedido.contrato);
@@ -325,29 +330,93 @@ export async function decidirPedido(prefeituraId: number, id: number, usuarioId:
 
     // Conferir nao e decidir: carimba a conferencia e deixa `decidido_em` nulo,
     // que e o que a constraint do banco exige e o que o historico deve contar.
-    if (!ehDecisao(dados.acao)) {
+    if (dados.acao === "conferir") {
       await executar(
         `update pedidos_fornecimento
-         set status = $2::pedido_status, conferido_por_id = $3, conferido_em = now()
+         set status = 'conferido', conferido_por_id = $2, conferido_em = now()
          where id = $1`,
-        [pedido.id, regra.destino, usuarioId],
+        [pedido.id, usuarioId],
       );
-      return { status: regra.destino, secretariaId: pedido.secretaria_id };
+      return { status: "conferido" as PedidoStatus, secretariaId: pedido.secretaria_id };
+    }
+
+    if (mexeNoEmpenho(dados.acao)) {
+      if (!dados.empenhoId) return { erro: "empenho-nao-informado" as const };
+      // A nota e travada antes de olhar o saldo dela, pelo mesmo motivo do
+      // contrato: dois pedidos empenhados ao mesmo tempo esperam um pelo outro.
+      const [nota] = (await executar(
+        `select e.id, e.numero, e.valor, c.numero as contrato
+         from empenhos e join contratos c on c.id = e.contrato_id
+         where e.prefeitura_id = $1 and e.id = $2 for update of e`,
+        [prefeituraId, dados.empenhoId],
+      )) as Array<{ id: number; numero: string; valor: string; contrato: string }>;
+      if (!nota) return { erro: "empenho-nao-encontrado" as const };
+      // Nota de empenho se emite contra uma despesa: a de um contrato nao paga
+      // o fornecimento de outro.
+      if (nota.contrato !== pedido.contrato) return { erro: "empenho-de-outro-contrato" as const };
+
+      const [valores] = (await executar(
+        `select coalesce(sum(ip.quantidade * ic.valor_unitario), 0) as total
+         from itens_pedido ip join itens_contrato ic on ic.id = ip.item_contrato_id
+         where ip.pedido_id = $1`,
+        [pedido.id],
+      )) as Array<{ total: string }>;
+      const valorDoPedido = Number(valores.total);
+
+      // O proprio pedido sai da conta: numa troca de nota ele ja pode estar
+      // contado na de origem, e nao pode disputar saldo consigo mesmo.
+      const [consumo] = (await executar(
+        `select coalesce(sum(v.total), 0) as comprometido
+         from pedidos_fornecimento p
+         left join lateral (
+           select coalesce(sum(ip.quantidade * ic.valor_unitario), 0) as total
+           from itens_pedido ip join itens_contrato ic on ic.id = ip.item_contrato_id
+           where ip.pedido_id = p.id
+         ) v on true
+         where p.empenho_id = $1 and p.id <> $2 and p.status in ('empenhado', 'autorizado')`,
+        [nota.id, pedido.id],
+      )) as Array<{ comprometido: string }>;
+      const disponivel = Number(nota.valor) - Number(consumo.comprometido);
+      if (valorDoPedido > disponivel + 1e-9) {
+        return { erro: "empenho-sem-saldo" as const, numero: nota.numero, pedido: valorDoPedido, disponivel: Math.max(0, disponivel) };
+      }
+
+      if (dados.acao === "empenhar") {
+        await executar(
+          "update pedidos_fornecimento set status = 'empenhado', empenho_id = $2 where id = $1",
+          [pedido.id, nota.id],
+        );
+        return { status: "empenhado" as PedidoStatus, secretariaId: pedido.secretaria_id };
+      }
+
+      const [anterior] = (await executar("select numero from empenhos where id = $1", [pedido.empenho_id])) as Array<{ numero: string }>;
+      await executar("update pedidos_fornecimento set empenho_id = $2 where id = $1", [pedido.id, nota.id]);
+      await executar(
+        `insert into empenho_alteracoes (empenho_id, pedido_id, descricao, motivo, alterado_por_id)
+         values ($1, $2, $3, $4, $5)`,
+        [
+          nota.id,
+          pedido.id,
+          `Pedido passou da nota ${anterior?.numero ?? "sem numero"} para ${nota.numero}.`,
+          dados.motivo,
+          usuarioId,
+        ],
+      );
+      return { status: pedido.status, secretariaId: pedido.secretaria_id };
     }
 
     await executar(
       `update pedidos_fornecimento
        set status = $2::pedido_status,
            motivo_decisao = $3,
-           empenho = case when $2 = 'autorizado' then $4 else empenho end,
-           entrega_prevista = coalesce($5::date, entrega_prevista),
-           decidido_por_id = $6,
+           entrega_prevista = coalesce($4::date, entrega_prevista),
+           decidido_por_id = $5,
            decidido_em = now()
        where id = $1`,
-      [pedido.id, regra.destino, dados.motivo, dados.empenho, paraDataIso(dados.entregaPrevista), usuarioId],
+      [pedido.id, destino, dados.motivo, paraDataIso(dados.entregaPrevista), usuarioId],
     );
 
-    return { status: regra.destino, secretariaId: pedido.secretaria_id };
+    return { status: destino, secretariaId: pedido.secretaria_id };
   });
 }
 
