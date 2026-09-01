@@ -1,9 +1,18 @@
-import { podeDecidirPedido, podeVerPedidos } from "@/lib/auth/papeis";
+import { podeConferirPedido, podeVerPedidos } from "@/lib/auth/papeis";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
 import { dataBrValida } from "@/lib/compras";
 import { contratoStatusLabels } from "@/lib/contratos";
-import { acoesDoPedido, pedidoStatusLabels, type AcaoPedido } from "@/lib/pedidos";
+import {
+  acoesDoPedido,
+  impedimentoLabels,
+  impedimentoParaAutorizar,
+  pedidoStatusLabels,
+  podeFazer,
+  type AcaoPedido,
+  type ContextoDeAcao,
+} from "@/lib/pedidos";
 import { decidirPedido, lerPedido } from "@/lib/repositorio/pedidos";
+import { regrasDeAutorizacao } from "@/lib/repositorio/prefeituras";
 import { NextResponse } from "next/server";
 
 /** Mesmo minimo do ajuste de quantidade: motivo de uma linha nao explica nada. */
@@ -30,9 +39,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 /**
- * Autorizar, recusar, cancelar ou estornar. A autorizacao e o ato que baixa o
- * saldo, entao ela e do Setor de Compras; cancelar, so enquanto pendente, cabe
- * tambem a secretaria que abriu.
+ * Conferir, devolver, autorizar, recusar, cancelar ou estornar. Cada ato tem um
+ * dono: a conferencia e do Setor de Compras, a autorizacao e do ordenador — o
+ * secretario da pasta ate a alcada da prefeitura, o gabinete acima dela — e o
+ * cancelamento e a retirada da secretaria que abriu.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -57,19 +67,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: `Pedido ${id} nao encontrado.` }, { status: 404 });
   }
 
-  const daPropriaSecretaria = sessao.papel === "secretario" && pedido.secretaria === sessao.secretariaChave;
-  const permitido = acao === "cancelar"
-    ? podeDecidirPedido(sessao.papel) || daPropriaSecretaria
-    : podeDecidirPedido(sessao.papel);
-  if (!permitido) {
-    return NextResponse.json(
-      {
-        error: acao === "cancelar"
-          ? "Cancelar o pedido cabe a secretaria que o abriu ou ao Setor de Compras."
-          : `Somente o Setor de Compras pode ${acoesDoPedido[acao].label.toLowerCase()} um pedido.`,
-      },
-      { status: 403 },
-    );
+  // A alcada e lida do banco, e o valor do pedido e somado no servidor a partir
+  // dos itens do contrato: nem um nem outro chegam pelo navegador.
+  const regras = await regrasDeAutorizacao(sessao.prefeituraId);
+  const impedimento = impedimentoParaAutorizar(
+    { id: sessao.id, papel: sessao.papel, ordenador: sessao.ordenador, secretariaChave: sessao.secretariaChave },
+    pedido,
+    regras,
+  );
+  const contexto: ContextoDeAcao = {
+    confere: podeConferirPedido(sessao.papel),
+    autoriza: impedimento === null,
+    daPropriaSecretaria: sessao.papel === "secretario" && pedido.secretaria === sessao.secretariaChave,
+  };
+  if (!podeFazer(acao, contexto)) {
+    return NextResponse.json({ error: vetoDe(acao, impedimento) }, { status: 403 });
   }
 
   const motivo = String(corpo.motivo ?? "").trim();
@@ -130,4 +142,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (erro) {
     return NextResponse.json({ error: (erro as Error).message }, { status: 500 });
   }
+}
+
+/**
+ * Por que a acao foi barrada. Nas tres acoes do ordenador a resposta e o
+ * impedimento apurado — dizer "voce nao pode" sem dizer quem pode faria a
+ * secretaria ligar para o Setor de Compras perguntar.
+ */
+function vetoDe(acao: AcaoPedido, impedimento: ReturnType<typeof impedimentoParaAutorizar>) {
+  if (acao === "autorizar" || acao === "recusar" || acao === "estornar") {
+    return impedimento ? impedimentoLabels[impedimento] : "Seu perfil nao decide a despesa deste pedido.";
+  }
+  if (acao === "cancelar") return "Cancelar o pedido cabe a secretaria que o abriu.";
+  return `Conferir e devolver sao do Setor de Compras: seu perfil nao pode ${acoesDoPedido[acao].label.toLowerCase()} um pedido.`;
 }

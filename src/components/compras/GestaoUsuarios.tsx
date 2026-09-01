@@ -1,11 +1,11 @@
 "use client";
 
 import { AppShell } from "@/components/compras/AppShell";
-import { papeisQuePodeCriar, papelDescricoes, papelLabels, type Papel } from "@/lib/auth/papeis";
+import { papeisQuePodeCriar, papelDescricoes, papelLabels, podeSerOrdenador, type Papel } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
 import type { Prefeitura } from "@/lib/repositorio/prefeituras";
 import type { Usuario } from "@/lib/repositorio/usuarios";
-import { AlertTriangle, CheckCircle2, KeyRound, UserPlus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Gavel, KeyRound, UserPlus } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 
 type Secretaria = { id: number; chave: string; nome: string };
@@ -24,11 +24,15 @@ export function GestaoUsuarios({
   const [usuarios, setUsuarios] = useState(usuariosIniciais);
   const [papel, setPapel] = useState<Papel>(papeisQuePodeCriar(sessao.papel)[0]);
   const [prefeituraId, setPrefeituraId] = useState<number>(sessao.prefeituraId ?? prefeituras[0]?.id ?? 0);
+  const [ordenador, setOrdenador] = useState(false);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const papeisDisponiveis = papeisQuePodeCriar(sessao.papel);
+  // Ordenar despesa e designacao, e nao consequencia do perfil: numa mesma
+  // secretaria ha quem requisite e ha quem autorize, e os dois sao secretario.
+  const admiteOrdenacao = podeSerOrdenador(papel);
   const secretariasDaPrefeitura = useMemo(() => secretarias[prefeituraId] ?? [], [secretarias, prefeituraId]);
 
   const recarregar = async () => {
@@ -54,11 +58,13 @@ export function GestaoUsuarios({
           papel,
           prefeituraId,
           secretariaId: Number(dados.get("secretariaId")) || null,
+          ordenador: admiteOrdenacao && ordenador,
         }),
       });
       const corpo = await resposta.json().catch(() => ({}));
       if (!resposta.ok) throw new Error(corpo.error || `A API respondeu ${resposta.status}.`);
       form.reset();
+      setOrdenador(false);
       setAviso(`${corpo.nome} cadastrado. Repasse a senha inicial: o sistema exige a troca no primeiro acesso.`);
       await recarregar();
     } catch (error) {
@@ -133,6 +139,13 @@ export function GestaoUsuarios({
                   </select>
                 </label>
               )}
+              {admiteOrdenacao && (
+                <label className="daddus-checkbox">
+                  <input type="checkbox" checked={ordenador} onChange={(event) => setOrdenador(event.target.checked)} />
+                  Ordenador de despesa: autoriza os pedidos de fornecimento
+                  {papel === "secretario" ? " da propria secretaria" : " acima da alcada dos secretarios"}
+                </label>
+              )}
               <label>Senha inicial
                 <input name="senha" type="password" required />
                 <small>Ao menos 8 caracteres, com letra e numero. Sera trocada no primeiro acesso.</small>
@@ -174,7 +187,10 @@ export function GestaoUsuarios({
                 <tr key={usuario.id}>
                   <td><strong>{usuario.nome}</strong>{usuario.secretariaNome && <small>{usuario.secretariaNome}</small>}</td>
                   <td>{usuario.email}</td>
-                  <td>{papelLabels[usuario.papel]}</td>
+                  <td>
+                    {papelLabels[usuario.papel]}
+                    {usuario.ordenador && <small>Ordenador de despesa</small>}
+                  </td>
                   {sessao.papel === "superadmin" && <td>{usuario.prefeituraNome ?? "-"}</td>}
                   <td>{usuario.ultimoAcesso ?? "Nunca entrou"}</td>
                   <td>
@@ -187,6 +203,18 @@ export function GestaoUsuarios({
                     ) : (
                       <div className="daddus-linha-acoes">
                         <button type="button" className="daddus-row-action" onClick={() => redefinirSenha(usuario)}><KeyRound size={13} /> Senha</button>
+                        {podeSerOrdenador(usuario.papel) && (
+                          <button type="button" className="daddus-row-action"
+                                  onClick={() => alterar(
+                                    usuario.id,
+                                    { ordenador: !usuario.ordenador },
+                                    usuario.ordenador
+                                      ? `${usuario.nome} deixou de ser ordenador: nao autoriza mais pedidos.`
+                                      : `${usuario.nome} designado ordenador de despesa.`,
+                                  )}>
+                            <Gavel size={13} /> {usuario.ordenador ? "Tirar ordenacao" : "Ordenador"}
+                          </button>
+                        )}
                         <button type="button" className={`daddus-row-action${usuario.ativo ? " perigo" : ""}`} onClick={() => alterar(usuario.id, { ativo: !usuario.ativo }, `${usuario.nome} ${usuario.ativo ? "desativado" : "reativado"}.`)}>
                           {usuario.ativo ? "Desativar" : "Reativar"}
                         </button>

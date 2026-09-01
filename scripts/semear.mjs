@@ -62,21 +62,26 @@ try {
   const { rows: secretarias } = await cliente.query("select id, chave from secretarias where prefeitura_id = $1", [prefeituraId]);
   const idPorChave = Object.fromEntries(secretarias.map((linha) => [linha.chave, linha.id]));
 
+  // Os secretarios nascem ordenadores da propria pasta, e o gabinete responde
+  // pelo que passa da alcada. E a divisao que o portal assume por padrao;
+  // quem requisita sem autorizar entra depois, sem a marca de ordenador.
   const usuarios = [
-    { email: "admin@novaesperanca.sp.gov.br", nome: "Helena Prado", papel: "admin", prefeitura: prefeituraId, secretaria: null },
-    { email: "compras@novaesperanca.sp.gov.br", nome: "Marina Alves", papel: "compras", prefeitura: prefeituraId, secretaria: null },
-    { email: "cpl@novaesperanca.sp.gov.br", nome: "Sergio Tavares", papel: "cpl", prefeitura: prefeituraId, secretaria: null },
-    { email: "educacao@novaesperanca.sp.gov.br", nome: "Rafael Nunes", papel: "secretario", prefeitura: prefeituraId, secretaria: idPorChave.educacao },
-    { email: "saude@novaesperanca.sp.gov.br", nome: "Camila Rocha", papel: "secretario", prefeitura: prefeituraId, secretaria: idPorChave.saude },
-    { email: "gestor@novaesperanca.sp.gov.br", nome: "Joao Pedro Lima", papel: "gestor", prefeitura: prefeituraId, secretaria: null },
+    { email: "admin@novaesperanca.sp.gov.br", nome: "Helena Prado", papel: "admin", prefeitura: prefeituraId, secretaria: null, ordenador: false },
+    { email: "compras@novaesperanca.sp.gov.br", nome: "Marina Alves", papel: "compras", prefeitura: prefeituraId, secretaria: null, ordenador: false },
+    { email: "cpl@novaesperanca.sp.gov.br", nome: "Sergio Tavares", papel: "cpl", prefeitura: prefeituraId, secretaria: null, ordenador: false },
+    { email: "educacao@novaesperanca.sp.gov.br", nome: "Rafael Nunes", papel: "secretario", prefeitura: prefeituraId, secretaria: idPorChave.educacao, ordenador: true },
+    { email: "saude@novaesperanca.sp.gov.br", nome: "Camila Rocha", papel: "secretario", prefeitura: prefeituraId, secretaria: idPorChave.saude, ordenador: true },
+    { email: "gabinete@novaesperanca.sp.gov.br", nome: "Antonia Vidal", papel: "gabinete", prefeitura: prefeituraId, secretaria: null, ordenador: true },
+    { email: "gestor@novaesperanca.sp.gov.br", nome: "Joao Pedro Lima", papel: "gestor", prefeitura: prefeituraId, secretaria: null, ordenador: false },
   ];
   for (const usuario of usuarios) {
     await cliente.query(
-      `insert into usuarios (email, nome, senha_hash, papel, prefeitura_id, secretaria_id)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into usuarios (email, nome, senha_hash, papel, prefeitura_id, secretaria_id, ordenador)
+       values ($1, $2, $3, $4, $5, $6, $7)
        on conflict (email) do update set nome = excluded.nome, papel = excluded.papel,
-         prefeitura_id = excluded.prefeitura_id, secretaria_id = excluded.secretaria_id`,
-      [usuario.email, usuario.nome, hash, usuario.papel, usuario.prefeitura, usuario.secretaria],
+         prefeitura_id = excluded.prefeitura_id, secretaria_id = excluded.secretaria_id,
+         ordenador = excluded.ordenador`,
+      [usuario.email, usuario.nome, hash, usuario.papel, usuario.prefeitura, usuario.secretaria, usuario.ordenador],
     );
   }
 

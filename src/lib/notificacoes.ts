@@ -3,7 +3,7 @@ import { cotacoesValidas, minimoDeCotacoes, money, processoStatusLabels, quantid
 import type { Contrato } from "@/lib/contratos";
 import { diasParaVencer } from "@/lib/contratos";
 import type { EtpStatus } from "@/lib/etp";
-import { valorDoPedido, type Pedido } from "@/lib/pedidos";
+import { alcadaDoPedido, valorDoPedido, type Pedido } from "@/lib/pedidos";
 import type { Solicitacao } from "@/lib/repositorio/solicitacoes";
 import type { Tarefa } from "@/lib/repositorio/tarefas";
 
@@ -61,6 +61,10 @@ function processosAbertos(processos: Processo[]) {
 export function montarNotificacoes(dados: {
   papel: Papel;
   secretaria: Secretaria | null;
+  /** Designado ordenador: e quem recebe a cobranca da autorizacao. */
+  ordenador: boolean;
+  /** Teto do secretario; acima dele a cobranca vai para o gabinete. */
+  limiteAutorizacao: number | null;
   processos: Processo[];
   solicitacoes: Solicitacao[];
   tarefas: Tarefa[];
@@ -153,17 +157,40 @@ export function montarNotificacoes(dados: {
     }
   }
 
-  // Pedido pendente e saldo que ainda nao caiu: enquanto ninguem decide, a
-  // secretaria espera e o contrato parece ter mais saldo do que tem.
+  // Pedido parado e saldo que ainda nao caiu: enquanto ninguem decide, a
+  // secretaria espera e o contrato parece ter mais saldo do que tem. A cobranca
+  // vai para a mesa certa — conferencia com o Compras, autorizacao com o
+  // ordenador —, senao ela chega a quem nao pode resolver.
   if (ehCompras) {
     for (const pedido of dados.pedidos.filter((item) => item.status === "pendente")) {
       avisos.push({
         chave: `pedido:${pedido.id}`,
-        titulo: `Pedido ${pedido.numero} aguardando autorizacao`,
+        titulo: `Pedido ${pedido.numero} aguardando conferencia`,
         detalhe: `${pedido.secretariaNome} · contrato ${pedido.contrato} · ${money(valorDoPedido(pedido))}`,
         href: "/painel/compras/pedidos",
         tom: "aviso",
         quando: pedido.criadoEm,
+      });
+    }
+  }
+
+  if (dados.ordenador) {
+    for (const pedido of dados.pedidos.filter((item) => item.status === "conferido")) {
+      const alcada = alcadaDoPedido(valorDoPedido(pedido), dados.limiteAutorizacao);
+      // O secretario e cobrado do que cabe na alcada dele; o gabinete, do que
+      // passou dela. Fora disso o aviso seria de um pedido que a pessoa abre e
+      // descobre que nao pode decidir.
+      const meu = dados.papel === "gabinete"
+        ? alcada === "gabinete"
+        : alcada === "secretaria" && pedido.secretaria === dados.secretaria;
+      if (!meu) continue;
+      avisos.push({
+        chave: `pedido-autorizar:${pedido.id}`,
+        titulo: `Pedido ${pedido.numero} aguardando a sua autorizacao`,
+        detalhe: `${pedido.secretariaNome} · contrato ${pedido.contrato} · ${money(valorDoPedido(pedido))}`,
+        href: "/painel/compras/pedidos",
+        tom: "aviso",
+        quando: pedido.conferidoEm ?? pedido.criadoEm,
       });
     }
   }

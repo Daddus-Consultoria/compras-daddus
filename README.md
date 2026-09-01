@@ -130,7 +130,7 @@ demonstracao, nao para uso real: os dados somem a cada reinicio.
 | `tramites_cpl` | Recebimento, diligencia e retorno registrados pela comissao |
 | `contratos` | Contrato devolvido pela CPL, com vigencia e valor somado dos itens |
 | `itens_contrato` | Itens efetivamente contratados, com quantidade e preco unitario |
-| `pedidos_fornecimento` | Pedidos das secretarias dentro do contrato, com a decisao do Setor de Compras |
+| `pedidos_fornecimento` | Pedidos das secretarias dentro do contrato, com a conferencia do Setor de Compras e a autorizacao do ordenador |
 | `itens_pedido` | Quantidade pedida de cada item do contrato |
 
 A logo e servida por `GET /api/config-prefeitura/logo`, com um sufixo de versao
@@ -159,7 +159,7 @@ Todas rodam no servidor; o navegador nunca recebe a `DATABASE_URL`.
 | `/api/contratos/[numero]` | GET, PATCH, DELETE | Ficha do contrato e a lista de itens contratados |
 | `/api/contratos/[numero]/saldo` | GET | Saldo por item: contratado, autorizado, em analise e o que sobra |
 | `/api/pedidos` | GET, POST | Pedidos de fornecimento; o secretario so enxerga os da propria secretaria |
-| `/api/pedidos/[id]` | GET, PATCH | Autorizar, recusar, cancelar ou estornar um pedido |
+| `/api/pedidos/[id]` | GET, PATCH | Conferir, devolver, autorizar, recusar, cancelar ou estornar um pedido |
 | `/api/agenda` | GET, POST, PATCH, DELETE | Agenda pessoal e a nota de acompanhamento |
 | `/api/notificacoes` | GET, POST | Avisos derivados do estado atual e o que ja foi lido |
 
@@ -177,10 +177,43 @@ Toda pessoa entra com o proprio e-mail e enxerga apenas o fluxo do seu perfil.
 | --- | --- | --- |
 | `superadmin` | Todas as prefeituras | Cria prefeituras e usuarios de qualquer municipio |
 | `admin` | Uma prefeitura | Cria e desativa usuarios da propria prefeitura; edita os dados institucionais |
-| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; elabora o ETP; cadastra contratos; autoriza pedidos de fornecimento; exporta os PDFs |
+| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; elabora o ETP; cadastra contratos; confere os pedidos de fornecimento; exporta os PDFs |
 | `cpl` | Uma prefeitura | Recebe o mapa de precos, baixa o DFD e o ETP para instruir a licitacao, registra a tramitacao e devolve o processo com o contrato |
-| `secretario` | Uma secretaria | Formaliza a demanda (DFD), preenche a quantidade da propria secretaria e pede fornecimento nos contratos |
+| `secretario` | Uma secretaria | Formaliza a demanda (DFD), preenche a quantidade da propria secretaria e pede fornecimento nos contratos. Marcado como ordenador, autoriza a despesa da propria pasta |
+| `gabinete` | Uma prefeitura | Ordenador geral: autoriza a despesa acima da alcada dos secretarios e enxerga os pedidos de todas as pastas |
 | `gestor` | Uma prefeitura | Acompanha processos, contratos e saldos em somente leitura |
+
+### Autorizacao da despesa
+
+Quem autoriza o pedido de fornecimento — o ato que baixa o saldo do contrato —
+e o **ordenador**, e nao o Setor de Compras. Na prefeitura quem ordena despesa e
+o prefeito, quase sempre delegado por decreto aos secretarios de pasta; o Setor
+de Compras instrui o pedido, nao decide sobre ele.
+
+O pedido tem tres atos, em tres maos:
+
+```
+abrir (secretaria)  ->  conferir (Compras)  ->  autorizar (ordenador)
+```
+
+- **Ordenador e designacao, nao perfil.** Dentro de uma secretaria ha quem
+  requisite e ha quem autorize, e as duas pessoas entram como `secretario`. A
+  marca `ordenador`, dada na tela de usuarios, e que separa uma da outra.
+- **A alcada mora na prefeitura** (Configuracao da prefeitura), porque a
+  delegacao vem de decreto e cada municipio delega ate um valor diferente. Ate o
+  limite decide o secretario da pasta; acima dele, o gabinete. Limite vazio
+  significa sem teto. O gabinete autoriza em qualquer faixa: a alcada e piso de
+  autoridade, nao faixa exclusiva.
+- **Quem abre nao autoriza**, quando "exigir ordenador distinto" esta ligada — o
+  padrao. Numa secretaria de uma pessoa so, o pedido que ela abrir sobe para o
+  gabinete, que e sempre outra pessoa; municipios que nao queiram essa trava a
+  desligam na mesma tela.
+- **Compras devolve, nao recusa.** "Devolver" e o "refaca" sobre a instrucao do
+  pedido e exige motivo escrito; "recusar" e o "nao" do ordenador sobre a
+  despesa. O pedido devolvido sai de circulacao e a secretaria abre outro.
+- O saldo so cai na autorizacao, mas o pedido segura a quantidade desde que
+  nasce: `pendente` e `conferido` contam como "em analise" e nao ficam livres
+  para outra secretaria pedir.
 
 ### Isolamento
 

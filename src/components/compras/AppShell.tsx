@@ -60,6 +60,15 @@ function linksDoPapel(papel: Papel): NavLink[] {
       { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck, grupo: "fluxo" },
     ];
   }
+  // O gabinete entra pela fila de autorizacao: e o que ele tem a fazer aqui.
+  // Os contratos vem junto porque autorizar sem enxergar o saldo do contrato
+  // seria assinar no escuro.
+  if (papel === "gabinete") {
+    return [
+      { href: "/painel/compras/pedidos", label: "Pedidos de fornecimento", icon: PackageCheck, grupo: "fluxo" },
+      { href: "/painel/compras/contratos", label: "Contratos", icon: FileSignature, grupo: "fluxo", match: ["/painel/compras/contrato"] },
+    ];
+  }
   if (papel === "gestor") {
     return [
       { href: "/painel/compras", label: "Acompanhamento", icon: LayoutDashboard, grupo: "fluxo", exact: true },

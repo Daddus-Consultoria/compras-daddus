@@ -3,11 +3,12 @@
 import { AppShell } from "@/components/compras/AppShell";
 import { podeEditarConfigPrefeitura } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
-import type { PrefeituraConfig, SecretariaInfo } from "@/lib/compras";
+import type { PrefeituraConfig, RegrasAutorizacao, SecretariaInfo } from "@/lib/compras";
 import { AlertTriangle, CheckCircle2, ImagePlus, Plus, Save, Trash2 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
 const emptyConfig: PrefeituraConfig = { estado: "", nome: "", cnpj: "", logoUrl: "", enderecoCompras: "" };
+const regrasPadrao = { limiteAutorizacao: "", exigeOrdenadorDistinto: true };
 const estados = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"];
 
 export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciais }: { sessao: Sessao; secretarias: SecretariaInfo[] }) {
@@ -15,6 +16,9 @@ export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciai
   // Compras os consulta porque saem no cabecalho dos PDFs, mas nao os altera.
   const podeEditar = podeEditarConfigPrefeitura(sessao.papel);
   const [config, setConfig] = useState<PrefeituraConfig>(emptyConfig);
+  // A alcada mora em estado proprio porque nao e dado institucional: nao sai
+  // em documento nenhum, governa quem assina a despesa.
+  const [regras, setRegras] = useState(regrasPadrao);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [saved, setSaved] = useState(false);
@@ -31,7 +35,13 @@ export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciai
         if (!response.ok) throw new Error(`A API respondeu ${response.status}.`);
         return response.json();
       })
-      .then((dados) => setConfig({ ...emptyConfig, ...dados }))
+      .then((dados: PrefeituraConfig & RegrasAutorizacao) => {
+        setConfig({ ...emptyConfig, ...dados });
+        setRegras({
+          limiteAutorizacao: dados.limiteAutorizacao == null ? "" : String(dados.limiteAutorizacao),
+          exigeOrdenadorDistinto: dados.exigeOrdenadorDistinto ?? true,
+        });
+      })
       .catch((error: Error) => setErro(`Nao foi possivel carregar os dados da prefeitura: ${error.message}`))
       .finally(() => setLoading(false));
   }, []);
@@ -66,11 +76,17 @@ export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciai
       form.set("nome", config.nome);
       form.set("cnpj", config.cnpj);
       form.set("enderecoCompras", config.enderecoCompras);
+      form.set("limiteAutorizacao", regras.limiteAutorizacao);
+      form.set("exigeOrdenadorDistinto", String(regras.exigeOrdenadorDistinto));
       if (logoFile) form.set("logo", logoFile);
       const response = await fetch("/api/config-prefeitura", { method: "PUT", body: form });
       if (!response.ok) throw new Error(`A API respondeu ${response.status}.`);
-      const atualizado = await response.json();
+      const atualizado = (await response.json()) as PrefeituraConfig & RegrasAutorizacao;
       setConfig((current) => ({ ...current, ...atualizado }));
+      setRegras({
+        limiteAutorizacao: atualizado.limiteAutorizacao == null ? "" : String(atualizado.limiteAutorizacao),
+        exigeOrdenadorDistinto: atualizado.exigeOrdenadorDistinto,
+      });
       setSaved(true);
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Nao foi possivel salvar a configuracao.");
@@ -158,6 +174,42 @@ export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciai
                 <small>PNG ou JPG · recomendado 600 x 180 px</small>
                 <input type="file" accept="image/png,image/jpeg,image/svg+xml" disabled={!podeEditar} onChange={handleLogo} />
               </label>
+            </div>
+
+            <div className="daddus-form-section">
+              <div>
+                <h3>Autorizacao da despesa</h3>
+                <p>
+                  Quem autoriza o pedido de fornecimento e o ordenador: o secretario da pasta ate o limite abaixo,
+                  o gabinete acima dele. Marque quem e ordenador na tela de usuarios.
+                </p>
+              </div>
+              <div className="daddus-form-grid">
+                <label>Alcada do secretario (R$)
+                  <input
+                    value={regras.limiteAutorizacao}
+                    disabled={!podeEditar}
+                    inputMode="decimal"
+                    placeholder="sem limite"
+                    onChange={(event) => setRegras((atual) => ({ ...atual, limiteAutorizacao: event.target.value }))}
+                  />
+                  <small>Vazio: o secretario autoriza qualquer valor da propria pasta.</small>
+                </label>
+                <label className="daddus-checkbox span-2">
+                  <input
+                    type="checkbox"
+                    checked={regras.exigeOrdenadorDistinto}
+                    disabled={!podeEditar}
+                    onChange={(event) => setRegras((atual) => ({ ...atual, exigeOrdenadorDistinto: event.target.checked }))}
+                  />
+                  Quem abre o pedido nao pode autoriza-lo
+                </label>
+                {regras.exigeOrdenadorDistinto && (
+                  <p className="daddus-muted span-2">
+                    Numa secretaria com um unico usuario, o pedido que ele abrir sobe para o gabinete — que e sempre outra pessoa.
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="daddus-form-section">
