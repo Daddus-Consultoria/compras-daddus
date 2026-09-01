@@ -1,6 +1,6 @@
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
 import type { ContratoStatus } from "@/lib/contratos";
-import { acoesDoPedido, type AcaoPedido, type Pedido, type PedidoStatus, type SaldoItem } from "@/lib/pedidos";
+import { acoesDoPedido, ehDecisao, type AcaoPedido, type Pedido, type PedidoStatus, type SaldoItem } from "@/lib/pedidos";
 import { paraDataIso } from "@/lib/repositorio/processos";
 
 type LinhaPedido = Omit<Pedido, "itens"> & { itens: Pedido["itens"] };
@@ -14,7 +14,10 @@ const selecao = `
          to_char(p.entrega_prevista, 'DD/MM/YYYY') as "entregaPrevista",
          p.motivo_decisao as "motivoDecisao",
          autor.nome as solicitante,
+         p.criado_por_id as "criadoPorId",
          to_char(p.criado_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as "criadoEm",
+         conferente.nome as conferente,
+         to_char(p.conferido_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as "conferidoEm",
          decisor.nome as decisor,
          to_char(p.decidido_em at time zone 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI') as "decididoEm",
          coalesce((select jsonb_agg(jsonb_build_object(
@@ -33,6 +36,7 @@ const selecao = `
   join contratos c on c.id = p.contrato_id
   join secretarias sec on sec.id = p.secretaria_id
   left join usuarios autor on autor.id = p.criado_por_id
+  left join usuarios conferente on conferente.id = p.conferido_por_id
   left join usuarios decisor on decisor.id = p.decidido_por_id`;
 
 function paraPedido(linha: LinhaPedido): Pedido {
@@ -91,14 +95,15 @@ type LinhaSaldo = {
   em_analise: string;
 };
 
-// O saldo nasce aqui, na leitura: contratado menos autorizado. Pedido pendente
-// entra numa coluna a parte porque ainda nao consumiu nada — mas tambem nao
-// esta livre para outra secretaria tomar.
+// O saldo nasce aqui, na leitura: contratado menos autorizado. Pedido ainda
+// nao autorizado entra numa coluna a parte porque nao consumiu nada — mas
+// tambem nao esta livre para outra secretaria tomar. Conferido conta junto com
+// pendente: a conferencia nao devolve a quantidade para a praca.
 const selecaoSaldo = `
   select ic.id as item_contrato_id, ic.numero_item, ic.descricao, ic.unidade,
          ic.valor_unitario, ic.quantidade_contratada,
          coalesce(sum(ip.quantidade) filter (where p.status = 'autorizado'), 0) as autorizada,
-         coalesce(sum(ip.quantidade) filter (where p.status = 'pendente'), 0) as em_analise
+         coalesce(sum(ip.quantidade) filter (where p.status in ('pendente', 'conferido')), 0) as em_analise
   from itens_contrato ic
   join contratos c on c.id = ic.contrato_id
   left join itens_pedido ip on ip.item_contrato_id = ic.id
@@ -281,9 +286,13 @@ export type DadosDecisao = {
 };
 
 /**
- * Autoriza, recusa, cancela ou estorna. A autorizacao e o unico ponto em que o
- * saldo cai, entao e aqui que ele e conferido de novo, com o contrato travado:
- * entre a abertura do pedido e a decisao o contrato pode ter mudado de itens.
+ * Confere, devolve, autoriza, recusa, cancela ou estorna. A autorizacao e o
+ * unico ponto em que o saldo cai, entao e aqui que ele e conferido de novo,
+ * com o contrato travado: entre a abertura do pedido e a decisao o contrato
+ * pode ter mudado de itens.
+ *
+ * Quem pode fazer cada uma dessas coisas nao se decide aqui — a rota resolve
+ * isso antes, porque depende do valor do pedido e das regras da prefeitura.
  */
 export async function decidirPedido(prefeituraId: number, id: number, usuarioId: number | null, dados: DadosDecisao) {
   const regra = acoesDoPedido[dados.acao];
@@ -312,6 +321,18 @@ export async function decidirPedido(prefeituraId: number, id: number, usuarioId:
       // contado em "em analise", e ele nao pode disputar consigo mesmo.
       const semSaldo = faltas(saldo, pedidos, (item) => item.saldo);
       if (semSaldo.length) return { erro: "sem-saldo" as const, faltas: semSaldo };
+    }
+
+    // Conferir nao e decidir: carimba a conferencia e deixa `decidido_em` nulo,
+    // que e o que a constraint do banco exige e o que o historico deve contar.
+    if (!ehDecisao(dados.acao)) {
+      await executar(
+        `update pedidos_fornecimento
+         set status = $2::pedido_status, conferido_por_id = $3, conferido_em = now()
+         where id = $1`,
+        [pedido.id, regra.destino, usuarioId],
+      );
+      return { status: regra.destino, secretariaId: pedido.secretaria_id };
     }
 
     await executar(

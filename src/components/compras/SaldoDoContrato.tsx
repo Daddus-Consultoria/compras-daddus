@@ -4,6 +4,7 @@ import { money } from "@/lib/compras";
 import {
   limiteDeAlerta,
   pedidoStatusLabels,
+  reservaSaldo,
   pedidoTone,
   percentualExecutado,
   saldoCritico,
@@ -32,7 +33,8 @@ export function SaldoDoContrato({ saldo, pedidos }: { saldo: SaldoItem[]; pedido
   const executado = totalExecutado(saldo);
   const disponivel = totalDoSaldo(saldo);
   const consumo = percentualExecutado(saldo);
-  const pendentes = pedidos.filter((pedido) => pedido.status === "pendente");
+  // Pendente e conferido: os dois seguram quantidade sem terem baixado saldo.
+  const emAnalise = pedidos.filter((pedido) => reservaSaldo(pedido.status));
 
   return (
     <>
@@ -96,7 +98,7 @@ export function SaldoDoContrato({ saldo, pedidos }: { saldo: SaldoItem[]; pedido
           <strong>Pedidos deste contrato</strong>
           <span>
             {pedidos.length} {pedidos.length === 1 ? "pedido registrado" : "pedidos registrados"}
-            {pendentes.length ? ` · ${pendentes.length} aguardando autorizacao` : ""}
+            {emAnalise.length ? ` · ${emAnalise.length} em analise` : ""}
           </span>
         </div>
       </div>

@@ -1,9 +1,11 @@
+import type { Papel } from "@/lib/auth/papeis";
 import type { Contrato, ItemContrato } from "@/lib/contratos";
 import { contratosDemo } from "@/lib/contratos";
 
 /**
- * Execucao do contrato: a secretaria pede o fornecimento, o Setor de Compras
- * autoriza, e e a autorizacao que baixa o saldo.
+ * Execucao do contrato, em tres atos e tres maos: a secretaria pede, o Setor de
+ * Compras confere, o ordenador autoriza. E a autorizacao que baixa o saldo,
+ * porque autorizar despesa e ato do ordenador — o Compras instrui.
  *
  * Nenhum numero de saldo e guardado. Saldo e sempre "o que foi contratado menos
  * o que foi autorizado", apurado na leitura — assim ele nao tem como divergir
@@ -11,10 +13,11 @@ import { contratosDemo } from "@/lib/contratos";
  */
 
 /** Os valores sao os mesmos do enum pedido_status no banco. */
-export type PedidoStatus = "pendente" | "autorizado" | "recusado" | "cancelado" | "estornado";
+export type PedidoStatus = "pendente" | "conferido" | "autorizado" | "recusado" | "cancelado" | "estornado";
 
 export const pedidoStatusLabels: Record<PedidoStatus, string> = {
-  pendente: "Aguardando autorizacao",
+  pendente: "Aguardando conferencia",
+  conferido: "Aguardando autorizacao",
   autorizado: "Autorizado",
   recusado: "Recusado",
   cancelado: "Cancelado",
@@ -22,25 +25,38 @@ export const pedidoStatusLabels: Record<PedidoStatus, string> = {
 };
 
 export const pedidoStatusDescricoes: Record<PedidoStatus, string> = {
-  pendente: "A secretaria pediu; o Setor de Compras ainda nao decidiu. Nao baixa saldo.",
-  autorizado: "Fornecimento liberado. E o unico estado que consome saldo do contrato.",
-  recusado: "O Setor de Compras negou o pedido, com motivo registrado.",
-  cancelado: "Retirado antes da decisao, por quem pediu ou pelo Setor de Compras.",
+  pendente: "A secretaria pediu; o Setor de Compras ainda nao conferiu. Nao baixa saldo.",
+  conferido: "Saldo e contrato conferidos; esperando o autorizo do ordenador. Nao baixa saldo, mas segura a quantidade.",
+  autorizado: "Fornecimento liberado pelo ordenador. E o unico estado que consome saldo do contrato.",
+  recusado: "O ordenador negou a despesa, com motivo registrado.",
+  cancelado: "Retirado antes da autorizacao: pela secretaria que pediu, ou devolvido pelo Setor de Compras com motivo.",
   estornado: "Autorizacao desfeita; a quantidade volta ao saldo, com motivo registrado.",
 };
 
-export const pedidoStatusEmOrdem: PedidoStatus[] = ["pendente", "autorizado", "recusado", "cancelado", "estornado"];
+export const pedidoStatusEmOrdem: PedidoStatus[] = ["pendente", "conferido", "autorizado", "recusado", "cancelado", "estornado"];
 
 export function pedidoTone(status: PedidoStatus) {
   if (status === "pendente") return "yellow";
   if (status === "autorizado") return "green";
-  if (status === "estornado") return "blue";
+  // Conferido e estornado dividem o azul: um e comeco de fila, o outro e
+  // terminal, e o rotulo ao lado ja diz qual dos dois.
+  if (status === "conferido" || status === "estornado") return "blue";
   return "gray";
 }
 
 /** O saldo cai na autorizacao e volta no estorno; os demais estados nao o tocam. */
 export function consomeSaldo(status: PedidoStatus) {
   return status === "autorizado";
+}
+
+/**
+ * Estados que ainda podem virar autorizacao. A quantidade deles nao caiu do
+ * saldo, mas tambem nao esta livre: se `conferido` ficasse de fora daqui, o
+ * pedido perderia a reserva entre a conferencia e o autorizo, e duas
+ * secretarias tomariam o mesmo saldo.
+ */
+export function reservaSaldo(status: PedidoStatus) {
+  return status === "pendente" || status === "conferido";
 }
 
 export type ItemPedido = {
@@ -69,7 +85,11 @@ export type Pedido = {
   entregaPrevista: string | null;
   motivoDecisao: string;
   solicitante: string | null;
+  /** Id de quem abriu: e por ele que a prefeitura exige ordenador diferente do solicitante. */
+  criadoPorId: number | null;
   criadoEm: string;
+  conferente: string | null;
+  conferidoEm: string | null;
   decisor: string | null;
   decididoEm: string | null;
   itens: ItemPedido[];
@@ -80,9 +100,75 @@ export function valorDoPedido(pedido: Pick<Pedido, "itens">) {
 }
 
 /**
+ * Quem autoriza a despesa.
+ *
+ * O ordenador e o secretario da pasta ate o limite de alcada da prefeitura, e
+ * o gabinete acima dele — a delegacao de ordenacao vem de decreto, e o decreto
+ * costuma delegar ate um valor. `limite` nulo e "sem teto": o secretario
+ * autoriza qualquer valor da propria pasta.
+ *
+ * O gabinete autoriza em qualquer faixa; a alcada e piso de autoridade, nao
+ * faixa exclusiva.
+ */
+export type Alcada = "secretaria" | "gabinete";
+
+export function alcadaDoPedido(valor: number, limite: number | null): Alcada {
+  if (limite === null) return "secretaria";
+  return valor > limite ? "gabinete" : "secretaria";
+}
+
+/** So o necessario da sessao: a regra nao precisa saber o resto de quem esta logado. */
+export type QuemDecide = {
+  id: number;
+  papel: Papel;
+  ordenador: boolean;
+  secretariaChave: string | null;
+};
+
+export type RegrasDeAutorizacao = {
+  /** Teto do secretario, em reais. Nulo = sem teto. */
+  limite: number | null;
+  /** Quando ligada, quem abriu o pedido nao o autoriza. */
+  exigeOrdenadorDistinto: boolean;
+};
+
+export type Impedimento = "nao-e-ordenador" | "outra-secretaria" | "acima-da-alcada" | "mesma-pessoa";
+
+export const impedimentoLabels: Record<Impedimento, string> = {
+  "nao-e-ordenador": "Autorizar a despesa cabe ao ordenador designado — o secretario da pasta ou o gabinete.",
+  "outra-secretaria": "O secretario autoriza a despesa da propria pasta.",
+  "acima-da-alcada": "O valor passa da alcada do secretario: este pedido e do gabinete.",
+  "mesma-pessoa": "Quem abriu o pedido nao o autoriza. Outro ordenador da pasta, ou o gabinete, decide.",
+};
+
+/**
+ * Por que esta pessoa nao pode autorizar este pedido — ou `null` quando pode.
+ * Devolve o motivo, e nao um booleano, porque a tela e a API precisam dizer
+ * qual das quatro travas pegou.
+ */
+export function impedimentoParaAutorizar(
+  quem: QuemDecide,
+  pedido: Pick<Pedido, "secretaria" | "criadoPorId" | "itens">,
+  regras: RegrasDeAutorizacao,
+): Impedimento | null {
+  if (!quem.ordenador || (quem.papel !== "secretario" && quem.papel !== "gabinete")) return "nao-e-ordenador";
+  if (quem.papel === "secretario") {
+    if (quem.secretariaChave !== pedido.secretaria) return "outra-secretaria";
+    if (alcadaDoPedido(valorDoPedido(pedido), regras.limite) === "gabinete") return "acima-da-alcada";
+  }
+  // Id 0 e a sessao de demonstracao, que nao abriu coisa nenhuma.
+  if (regras.exigeOrdenadorDistinto && quem.id > 0 && pedido.criadoPorId === quem.id) return "mesma-pessoa";
+  return null;
+}
+
+export function podeAutorizar(quem: QuemDecide, pedido: Pick<Pedido, "secretaria" | "criadoPorId" | "itens">, regras: RegrasDeAutorizacao) {
+  return impedimentoParaAutorizar(quem, pedido, regras) === null;
+}
+
+/**
  * O saldo de um item do contrato, aberto nas parcelas que o formam. "Em
- * analise" fica separado do saldo porque pedido pendente ainda nao consumiu
- * nada — mas tambem nao esta livre para outra secretaria pedir.
+ * analise" fica separado do saldo porque pedido ainda nao autorizado nao
+ * consumiu nada — mas tambem nao esta livre para outra secretaria pedir.
  */
 export type SaldoItem = {
   itemContratoId: number;
@@ -99,11 +185,17 @@ export type SaldoItem = {
   disponivel: number;
 };
 
-export type AcaoPedido = "autorizar" | "recusar" | "cancelar" | "estornar";
+export type AcaoPedido = "conferir" | "devolver" | "autorizar" | "recusar" | "cancelar" | "estornar";
 
 /**
- * Cada acao parte de um estado e leva a outro. Recusa e estorno exigem motivo
- * escrito — sao as duas que deixam a secretaria sem o fornecimento.
+ * Cada acao parte de um estado e leva a outro. Recusa, devolucao e estorno
+ * exigem motivo escrito — sao as tres que deixam a secretaria sem o
+ * fornecimento que pediu.
+ *
+ * Devolver e recusar terminam parecido e sao coisas diferentes: devolver e o
+ * "refaca" do Setor de Compras, sobre a instrucao do pedido; recusar e o "nao"
+ * do ordenador, sobre a despesa. Por isso a devolucao cai em `cancelado`, que
+ * e o estado de quem saiu de circulacao sem decisao sobre a despesa.
  */
 export const acoesDoPedido: Record<AcaoPedido, {
   destino: PedidoStatus;
@@ -111,14 +203,47 @@ export const acoesDoPedido: Record<AcaoPedido, {
   exigeMotivo: boolean;
   label: string;
 }> = {
-  autorizar: { destino: "autorizado", origens: ["pendente"], exigeMotivo: false, label: "Autorizar" },
-  recusar: { destino: "recusado", origens: ["pendente"], exigeMotivo: true, label: "Recusar" },
-  cancelar: { destino: "cancelado", origens: ["pendente"], exigeMotivo: false, label: "Cancelar" },
+  conferir: { destino: "conferido", origens: ["pendente"], exigeMotivo: false, label: "Conferir" },
+  devolver: { destino: "cancelado", origens: ["pendente", "conferido"], exigeMotivo: true, label: "Devolver" },
+  autorizar: { destino: "autorizado", origens: ["conferido"], exigeMotivo: false, label: "Autorizar" },
+  recusar: { destino: "recusado", origens: ["conferido"], exigeMotivo: true, label: "Recusar" },
+  cancelar: { destino: "cancelado", origens: ["pendente", "conferido"], exigeMotivo: false, label: "Cancelar" },
   estornar: { destino: "estornado", origens: ["autorizado"], exigeMotivo: true, label: "Estornar" },
 };
 
-export function acoesPossiveis(status: PedidoStatus): AcaoPedido[] {
-  return (Object.keys(acoesDoPedido) as AcaoPedido[]).filter((acao) => acoesDoPedido[acao].origens.includes(status));
+/** A conferencia nao decide a despesa: ela nao carimba `decidido_em`. */
+export function ehDecisao(acao: AcaoPedido) {
+  return acao !== "conferir";
+}
+
+/**
+ * O que esta pessoa pode fazer com este pedido. Cada ato tem um dono: conferir
+ * e devolver sao do Compras, autorizar, recusar e estornar sao do ordenador, e
+ * cancelar e a retirada de quem pediu.
+ */
+export type ContextoDeAcao = {
+  confere: boolean;
+  autoriza: boolean;
+  daPropriaSecretaria: boolean;
+};
+
+const donoDaAcao: Record<AcaoPedido, (contexto: ContextoDeAcao) => boolean> = {
+  conferir: (contexto) => contexto.confere,
+  devolver: (contexto) => contexto.confere,
+  autorizar: (contexto) => contexto.autoriza,
+  recusar: (contexto) => contexto.autoriza,
+  estornar: (contexto) => contexto.autoriza,
+  cancelar: (contexto) => contexto.daPropriaSecretaria,
+};
+
+export function acoesPossiveis(status: PedidoStatus, contexto: ContextoDeAcao): AcaoPedido[] {
+  return (Object.keys(acoesDoPedido) as AcaoPedido[]).filter(
+    (acao) => acoesDoPedido[acao].origens.includes(status) && donoDaAcao[acao](contexto),
+  );
+}
+
+export function podeFazer(acao: AcaoPedido, contexto: ContextoDeAcao) {
+  return donoDaAcao[acao](contexto);
 }
 
 /** So contrato em vigencia recebe pedido; suspenso, encerrado e rescindido, nao. */
@@ -167,7 +292,7 @@ export function saldoDosItens(itens: ItemContrato[], pedidos: Pedido[]): SaldoIt
       pedido.itens.filter((linha) => linha.itemContratoId === item.id).map((linha) => ({ status: pedido.status, quantidade: linha.quantidade })),
     );
     const autorizada = parcelas.filter((parcela) => consomeSaldo(parcela.status)).reduce((total, parcela) => total + parcela.quantidade, 0);
-    const emAnalise = parcelas.filter((parcela) => parcela.status === "pendente").reduce((total, parcela) => total + parcela.quantidade, 0);
+    const emAnalise = parcelas.filter((parcela) => reservaSaldo(parcela.status)).reduce((total, parcela) => total + parcela.quantidade, 0);
     const saldo = item.quantidadeContratada - autorizada;
     return {
       itemContratoId: item.id,
@@ -199,8 +324,11 @@ export const pedidosDemo: Pedido[] = [
     entregaPrevista: "12/09/2026",
     motivoDecisao: "",
     solicitante: "Helena Braga",
+    criadoPorId: 101,
     criadoEm: "02/09/2026 09:20",
-    decisor: "Marina Alves",
+    conferente: "Marina Alves",
+    conferidoEm: "02/09/2026 11:12",
+    decisor: "Rafael Nunes",
     decididoEm: "02/09/2026 15:04",
     itens: [
       { id: 1, itemContratoId: 1, item: 1, descricao: "Papel sulfite A4, branco, 75 g/m2, pacote com 500 folhas", unidade: "PCT", quantidade: 80, valorUnitario: 29.2 },
@@ -215,12 +343,15 @@ export const pedidosDemo: Pedido[] = [
     secretaria: "saude",
     secretariaNome: "Saude",
     justificativa: "Material de expediente das unidades basicas de saude.",
-    status: "pendente",
+    status: "conferido",
     empenho: "",
     entregaPrevista: null,
     motivoDecisao: "",
     solicitante: "Paulo Nery",
+    criadoPorId: 102,
     criadoEm: "08/09/2026 11:47",
+    conferente: "Marina Alves",
+    conferidoEm: "08/09/2026 14:05",
     decisor: null,
     decididoEm: null,
     itens: [

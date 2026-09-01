@@ -59,20 +59,29 @@ SEC_SAU=$(json "[s['id'] for s in d if s['chave']=='saude'][0]")
 
 echo
 echo "== 2. Usuarios de cada perfil =="
-for linha in "Ana Lima|admin@vilanova.sp.gov.br|admin|null" \
-             "Marina Alves|compras@vilanova.sp.gov.br|compras|null" \
-             "Rui Barbosa|cpl@vilanova.sp.gov.br|cpl|null" \
-             "Helena Braga|educacao@vilanova.sp.gov.br|secretario|$SEC_EDU" \
-             "Paulo Nery|saude@vilanova.sp.gov.br|secretario|$SEC_SAU" \
-             "Clara Souza|gestor@vilanova.sp.gov.br|gestor|null"; do
-  IFS='|' read -r nome email papel sec <<< "$linha"
-  req superadmin POST /api/usuarios "{\"nome\":\"$nome\",\"email\":\"$email\",\"senha\":\"Daddus@2026\",\"papel\":\"$papel\",\"prefeituraId\":$PREF,\"secretariaId\":$sec}"
+# O quinto campo e a ordenacao de despesa. Helena requisita pela Educacao e nao
+# autoriza; Vera e a ordenadora da mesma pasta. Sao duas pessoas de proposito:
+# e essa separacao que o fluxo exige.
+for linha in "Ana Lima|admin@vilanova.sp.gov.br|admin|null|false" \
+             "Marina Alves|compras@vilanova.sp.gov.br|compras|null|false" \
+             "Rui Barbosa|cpl@vilanova.sp.gov.br|cpl|null|false" \
+             "Helena Braga|educacao@vilanova.sp.gov.br|secretario|$SEC_EDU|false" \
+             "Vera Cruz|sec-educacao@vilanova.sp.gov.br|secretario|$SEC_EDU|true" \
+             "Paulo Nery|saude@vilanova.sp.gov.br|secretario|$SEC_SAU|false" \
+             "Bento Aguiar|gabinete@vilanova.sp.gov.br|gabinete|null|true" \
+             "Clara Souza|gestor@vilanova.sp.gov.br|gestor|null|false"; do
+  IFS='|' read -r nome email papel sec ord <<< "$linha"
+  req superadmin POST /api/usuarios "{\"nome\":\"$nome\",\"email\":\"$email\",\"senha\":\"Daddus@2026\",\"papel\":\"$papel\",\"prefeituraId\":$PREF,\"secretariaId\":$sec,\"ordenador\":$ord}"
   etapa 201 "cria usuario $papel"
 done
+req superadmin POST /api/usuarios "{\"nome\":\"Nao Ordena\",\"email\":\"naoordena@vilanova.sp.gov.br\",\"senha\":\"Daddus@2026\",\"papel\":\"compras\",\"prefeituraId\":$PREF,\"secretariaId\":null,\"ordenador\":true}"
+etapa 400 "Setor de Compras nao pode ser ordenador de despesa"
 
 entrar admin admin@vilanova.sp.gov.br
 entrar compras compras@vilanova.sp.gov.br
 entrar cpl cpl@vilanova.sp.gov.br
+entrar ordenadora sec-educacao@vilanova.sp.gov.br
+entrar gabinete gabinete@vilanova.sp.gov.br
 entrar educacao educacao@vilanova.sp.gov.br
 entrar saude saude@vilanova.sp.gov.br
 entrar gestor gestor@vilanova.sp.gov.br
@@ -217,10 +226,51 @@ IT1=$(json "d[0]['itemContratoId']")
 req educacao POST /api/pedidos "{\"contrato\":\"$CONTRATO\",\"justificativa\":\"Primeira remessa do ano letivo para as escolas.\",\"entregaPrevista\":\"20/09/2026\",\"itens\":[{\"itemContratoId\":$IT1,\"quantidade\":60}]}"
 etapa 201 "educacao pede fornecimento"
 PEDIDO=$(json "d['id']")
-req educacao PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar"}'
-etapa 403 "secretaria nao autoriza o proprio pedido"
 req compras PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar","empenho":"2026NE000431"}'
-etapa 200 "compras autoriza e baixa o saldo"
+etapa 403 "o Setor de Compras nao autoriza a despesa"
+req ordenadora PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar"}'
+etapa 409 "pedido sem conferencia nao chega ao ordenador"
+req compras PATCH "/api/pedidos/$PEDIDO" '{"acao":"conferir"}'
+etapa 200 "compras confere saldo, vigencia e itens"
+req educacao PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar"}'
+etapa 403 "secretario que nao e ordenador nao autoriza"
+
+req admin PUT /api/config-prefeitura "{\"nome\":\"Prefeitura de Vila Nova\",\"estado\":\"SP\",\"cnpj\":\"11.222.333/0001-44\",\"enderecoCompras\":\"Praca da Matriz, 10 - Centro - Vila Nova/SP\",\"exigeOrdenadorDistinto\":true,\"limiteAutorizacao\":10}"
+etapa 200 "admin fixa a alcada do secretario em R$ 10"
+req ordenadora PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar"}'
+etapa 403 "acima da alcada, o secretario nao autoriza"
+req gabinete PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar","empenho":"2026NE000431"}'
+etapa 200 "gabinete autoriza acima da alcada e baixa o saldo"
+
+echo
+echo "== 11b. Alcada, e quem abriu nao autoriza =="
+req admin PUT /api/config-prefeitura "{\"nome\":\"Prefeitura de Vila Nova\",\"estado\":\"SP\",\"cnpj\":\"11.222.333/0001-44\",\"enderecoCompras\":\"Praca da Matriz, 10 - Centro - Vila Nova/SP\",\"exigeOrdenadorDistinto\":true,\"limiteAutorizacao\":null}"
+etapa 200 "admin tira o teto: o secretario volta a autorizar a propria pasta"
+req educacao POST /api/pedidos "{\"contrato\":\"$CONTRATO\",\"justificativa\":\"Reposicao de papel para a secretaria escolar.\",\"itens\":[{\"itemContratoId\":$IT1,\"quantidade\":5}]}"
+etapa 201 "educacao abre o segundo pedido"
+PEDIDO2=$(json "d['id']")
+req compras PATCH "/api/pedidos/$PEDIDO2" '{"acao":"conferir"}'
+etapa 200 "compras confere o segundo pedido"
+req ordenadora PATCH "/api/pedidos/$PEDIDO2" '{"acao":"autorizar"}'
+etapa 200 "a ordenadora da pasta autoriza dentro da alcada"
+
+req ordenadora POST /api/pedidos "{\"contrato\":\"$CONTRATO\",\"justificativa\":\"Pedido aberto pela propria ordenadora da pasta.\",\"itens\":[{\"itemContratoId\":$IT1,\"quantidade\":5}]}"
+etapa 201 "a ordenadora tambem pode abrir pedido"
+PEDIDO3=$(json "d['id']")
+req compras PATCH "/api/pedidos/$PEDIDO3" '{"acao":"conferir"}'
+etapa 200 "compras confere o pedido da ordenadora"
+req ordenadora PATCH "/api/pedidos/$PEDIDO3" '{"acao":"autorizar"}'
+etapa 403 "quem abriu o pedido nao o autoriza"
+req gabinete PATCH "/api/pedidos/$PEDIDO3" '{"acao":"autorizar"}'
+etapa 200 "o gabinete resolve o pedido da propria ordenadora"
+
+req educacao POST /api/pedidos "{\"contrato\":\"$CONTRATO\",\"justificativa\":\"Pedido que sera devolvido pelo Setor de Compras.\",\"itens\":[{\"itemContratoId\":$IT1,\"quantidade\":5}]}"
+etapa 201 "educacao abre um pedido para ser devolvido"
+PEDIDO4=$(json "d['id']")
+req compras PATCH "/api/pedidos/$PEDIDO4" '{"acao":"devolver"}'
+etapa 400 "devolver sem motivo escrito e recusado"
+req compras PATCH "/api/pedidos/$PEDIDO4" '{"acao":"devolver","motivo":"Quantidade acima do consumo mensal declarado no DFD."}'
+etapa 200 "compras devolve com motivo, e o pedido sai de circulacao"
 req educacao GET "/api/contratos/$(python3 -c "import urllib.parse;print(urllib.parse.quote('$CONTRATO',safe=''))")/saldo"
 SALDO=$(json "[ (i['contratada'], i['autorizada'], i['saldo']) for i in d ][0]")
 echo "     item 1 (contratada, autorizada, saldo): $SALDO"
@@ -244,6 +294,10 @@ req saude PATCH "/api/processos/$PROC/status" '{"status":"em_montagem"}'
 etapa 403 "secretaria nao move a fase do processo"
 req gestor GET /api/contratos
 etapa 200 "gestor acompanha os contratos"
+req gabinete GET /api/pedidos
+etapa 200 "gabinete enxerga os pedidos de todas as secretarias"
+req gabinete PATCH "/api/pedidos/$PEDIDO" '{"acao":"conferir"}'
+etapa 403 "gabinete nao faz a conferencia do Setor de Compras"
 
 echo
 echo "== 12c. Proximo ciclo =="
@@ -278,7 +332,9 @@ MEM=$(python3 -c "
 import json; d=json.load(open('/tmp/fluxo.json'))
 p=[x for x in d if x['id']=='$PROC2'][0]
 print(len(p['itens']), sum(int(i['quantidades'].get('educacao',0)) for i in p['itens']))")
-if [ "$MEM" = "1 60" ]; then printf "  \033[32mok\033[0m   %-58s %s\n" "o lote do segundo ciclo veio do consumo real" "$MEM"; else printf "  \033[31mFALHA\033[0m %-58s %s (esperado '1 60')\n" "o lote do segundo ciclo veio do consumo real" "$MEM"; FALHAS+=("lote do segundo ciclo -> $MEM"); fi
+# 70 = os tres pedidos autorizados no contrato (60 + 5 + 5). O devolvido nao
+# entra: consumo e o que foi autorizado, e nao o que foi pedido.
+if [ "$MEM" = "1 70" ]; then printf "  \033[32mok\033[0m   %-58s %s\n" "o lote do segundo ciclo veio do consumo real" "$MEM"; else printf "  \033[31mFALHA\033[0m %-58s %s (esperado '1 70')\n" "o lote do segundo ciclo veio do consumo real" "$MEM"; FALHAS+=("lote do segundo ciclo -> $MEM"); fi
 PASSOS=$((PASSOS+1))
 
 echo
@@ -320,6 +376,13 @@ for pagina in /painel/compras /painel/compras/processos /painel/compras/processo
   CODIGO=$(curl -s -o /dev/null -w "%{http_code}" -b $J/compras.jar "$BASE$pagina")
   case "$pagina" in /painel/cpl|/painel/prefeitura) ESPERADO=307 ;; *) ESPERADO=200 ;; esac
   etapa $ESPERADO "compras abre $pagina"
+done
+# O gabinete tem duas telas e so: a fila que ele decide e o contrato que a
+# sustenta. O resto do fluxo nao e dele.
+for pagina in /painel/compras/pedidos /painel/compras/contratos /painel/compras/processos; do
+  CODIGO=$(curl -s -o /dev/null -w "%{http_code}" -b $J/gabinete.jar "$BASE$pagina")
+  case "$pagina" in /painel/compras/processos) ESPERADO=307 ;; *) ESPERADO=200 ;; esac
+  etapa $ESPERADO "gabinete abre $pagina"
 done
 
 echo

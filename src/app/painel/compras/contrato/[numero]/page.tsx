@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 export default async function ContratoPage({ params }: PageProps<"/painel/compras/contrato/[numero]">) {
-  const sessao = await exigirPapel("compras", "gestor", "admin", "cpl", "secretario");
+  const sessao = await exigirPapel("compras", "gestor", "admin", "cpl", "secretario", "gabinete");
   const { numero } = await params;
   const { contrato } = await obterContrato(sessao.prefeituraId, decodeURIComponent(numero));
   if (!contrato) notFound();

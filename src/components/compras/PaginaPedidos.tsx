@@ -2,18 +2,22 @@
 
 import { AppShell } from "@/components/compras/AppShell";
 import { NovoPedido } from "@/components/compras/NovoPedido";
-import { podeAbrirPedido, podeDecidirPedido } from "@/lib/auth/papeis";
+import { podeAbrirPedido, podeConferirPedido } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
-import { money, type SecretariaInfo } from "@/lib/compras";
+import { money, type RegrasAutorizacao, type SecretariaInfo } from "@/lib/compras";
 import type { Contrato } from "@/lib/contratos";
 import {
   acoesDoPedido,
   acoesPossiveis,
+  alcadaDoPedido,
+  impedimentoLabels,
+  impedimentoParaAutorizar,
   pedidoStatusEmOrdem,
   pedidoStatusLabels,
   pedidoTone,
   valorDoPedido,
   type AcaoPedido,
+  type ContextoDeAcao,
   type Pedido,
   type PedidoStatus,
 } from "@/lib/pedidos";
@@ -21,20 +25,22 @@ import { AlertTriangle, CalendarClock, ChevronDown, ChevronRight, ClipboardCheck
 import { useMemo, useState } from "react";
 
 /**
- * A fila de pedidos de fornecimento. Para o Setor de Compras e uma caixa de
- * entrada: cada pendente e um saldo que ainda nao caiu. Para a secretaria e o
- * acompanhamento do que ela pediu — e so do que ela pediu, porque o recorte vem
- * do servidor.
+ * A fila de pedidos de fornecimento, e ela e uma fila diferente para cada mao
+ * do fluxo: caixa de entrada de conferencia para o Setor de Compras, fila de
+ * autorizacao para o ordenador, acompanhamento para a secretaria que pediu — e
+ * so do que ela pediu, porque o recorte vem do servidor.
  */
 export function PaginaPedidos({
   pedidos,
   contratos,
   secretarias,
+  regras,
   sessao,
 }: {
   pedidos: Pedido[];
   contratos: Contrato[];
   secretarias: SecretariaInfo[];
+  regras: RegrasAutorizacao;
   sessao: Sessao;
 }) {
   const [busca, setBusca] = useState("");
@@ -44,8 +50,27 @@ export function PaginaPedidos({
   const [ocupado, setOcupado] = useState<number | null>(null);
   const [erro, setErro] = useState("");
 
-  const decide = podeDecidirPedido(sessao.papel);
+  const confere = podeConferirPedido(sessao.papel);
   const podeAbrir = podeAbrirPedido(sessao.papel) && !sessao.demonstracao;
+
+  // A regra de quem autoriza e a mesma do servidor, aplicada pedido a pedido:
+  // ela depende do valor, e nao so do perfil de quem esta olhando.
+  const quem = {
+    id: sessao.id,
+    papel: sessao.papel,
+    ordenador: sessao.ordenador,
+    secretariaChave: sessao.secretariaChave,
+  };
+  const impedimentoDe = (pedido: Pedido) =>
+    impedimentoParaAutorizar(quem, pedido, {
+      limite: regras.limiteAutorizacao,
+      exigeOrdenadorDistinto: regras.exigeOrdenadorDistinto,
+    });
+  const contextoDe = (pedido: Pedido): ContextoDeAcao => ({
+    confere,
+    autoriza: impedimentoDe(pedido) === null,
+    daPropriaSecretaria: sessao.papel === "secretario" && pedido.secretaria === sessao.secretariaChave,
+  });
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -58,9 +83,12 @@ export function PaginaPedidos({
   }, [busca, pedidos, situacao]);
 
   const pendentes = pedidos.filter((pedido) => pedido.status === "pendente");
+  const conferidos = pedidos.filter((pedido) => pedido.status === "conferido");
   const autorizados = pedidos.filter((pedido) => pedido.status === "autorizado");
   const valorAutorizado = autorizados.reduce((total, pedido) => total + valorDoPedido(pedido), 0);
-  const valorEmAnalise = pendentes.reduce((total, pedido) => total + valorDoPedido(pedido), 0);
+  const valorEmAnalise = [...pendentes, ...conferidos].reduce((total, pedido) => total + valorDoPedido(pedido), 0);
+  /** O que esta pessoa pode autorizar agora: e disso que o aviso do topo fala. */
+  const meusParaAutorizar = conferidos.filter((pedido) => impedimentoDe(pedido) === null);
 
   const decidir = async (pedido: Pedido, acao: AcaoPedido) => {
     const regra = acoesDoPedido[acao];
@@ -70,6 +98,8 @@ export function PaginaPedidos({
       if (!motivo.trim()) return;
     } else if (acao === "cancelar") {
       if (!window.confirm(`Cancelar o pedido ${pedido.numero}? Ele nao sera mais analisado.`)) return;
+    } else if (acao === "conferir") {
+      if (!window.confirm(`Conferir o pedido ${pedido.numero}?\n\nEle vai para a fila de autorizacao do ordenador. A quantidade segue reservada no contrato.`)) return;
     }
 
     // O empenho e opcional: nem toda prefeitura empenha no mesmo momento em que
@@ -106,11 +136,7 @@ export function PaginaPedidos({
         <div>
           <span className="daddus-overline">Execucao do contrato</span>
           <h2>Pedidos de fornecimento</h2>
-          <p>
-            {sessao.papel === "secretario"
-              ? "O que a sua secretaria pediu dentro dos contratos da prefeitura."
-              : "Cada pedido autorizado baixa o saldo do contrato. Recusa e estorno exigem motivo."}
-          </p>
+          <p>{explicacaoDoPapel(sessao, confere, regras)}</p>
         </div>
         {podeAbrir && (
           <div className="daddus-heading-actions">
@@ -123,22 +149,38 @@ export function PaginaPedidos({
 
       {erro && <div className="daddus-inline-warning"><AlertTriangle size={16} /> {erro}</div>}
 
-      {decide && pendentes.length > 0 && (
+      {confere && pendentes.length > 0 && (
+        <div className="daddus-notice">
+          <ClipboardCheck size={19} />
+          <div>
+            <strong>{pendentes.length} {pendentes.length === 1 ? "pedido aguardando" : "pedidos aguardando"} conferencia</strong>
+            <span>Confira saldo, vigencia e itens. Quem autoriza a despesa e o ordenador.</span>
+          </div>
+        </div>
+      )}
+
+      {meusParaAutorizar.length > 0 && (
         <div className="daddus-notice">
           <Hourglass size={19} />
           <div>
-            <strong>{pendentes.length} {pendentes.length === 1 ? "pedido aguardando" : "pedidos aguardando"} autorizacao</strong>
-            <span>{money(valorEmAnalise)} em analise — o saldo do contrato so cai quando voce autoriza.</span>
+            <strong>
+              {meusParaAutorizar.length} {meusParaAutorizar.length === 1 ? "pedido esperando" : "pedidos esperando"} a sua autorizacao
+            </strong>
+            <span>
+              {money(meusParaAutorizar.reduce((total, pedido) => total + valorDoPedido(pedido), 0))} de despesa —
+              o saldo do contrato so cai quando voce autoriza.
+            </span>
           </div>
         </div>
       )}
 
       <section className="daddus-metric-grid">
-        <Metric icon={<Hourglass />} label="Aguardando autorizacao" value={String(pendentes.length).padStart(2, "0")}
-                note={money(valorEmAnalise)} tone={pendentes.length ? "warning" : ""} />
+        <Metric icon={<ClipboardCheck />} label="Aguardando conferencia" value={String(pendentes.length).padStart(2, "0")}
+                note="Com o Setor de Compras" tone={pendentes.length ? "warning" : ""} />
+        <Metric icon={<Hourglass />} label="Aguardando autorizacao" value={String(conferidos.length).padStart(2, "0")}
+                note={`${money(valorEmAnalise)} em analise`} tone={conferidos.length ? "warning" : ""} />
         <Metric icon={<PackageCheck />} label="Autorizados" value={String(autorizados.length).padStart(2, "0")} note="Consumindo saldo" />
         <Metric icon={<Wallet />} label="Valor autorizado" value={money(valorAutorizado)} note="Somatorio dos pedidos vivos" />
-        <Metric icon={<ClipboardCheck />} label="Pedidos no total" value={String(pedidos.length).padStart(2, "0")} note="Todas as situacoes" />
       </section>
 
       <section className="daddus-table-card">
@@ -173,9 +215,7 @@ export function PaginaPedidos({
             <tbody>
               {filtrados.map((pedido) => {
                 const expandido = aberto === pedido.id;
-                const acoes = acoesPossiveis(pedido.status).filter((acao) =>
-                  acao === "cancelar" ? decide || sessao.papel === "secretario" : decide,
-                );
+                const acoes = acoesPossiveis(pedido.status, contextoDe(pedido));
                 return (
                   <Fragmento key={pedido.id}>
                     <tr className={expandido ? "daddus-linha-ativa" : ""}>
@@ -215,6 +255,14 @@ export function PaginaPedidos({
                             <p><strong>Justificativa</strong> {pedido.justificativa || "-"}</p>
                             {pedido.motivoDecisao && (
                               <p><strong>Motivo da decisao</strong> {pedido.motivoDecisao}</p>
+                            )}
+                            {pedido.conferidoEm && (
+                              <p className="daddus-muted">
+                                Conferido por {pedido.conferente ?? "-"} em {pedido.conferidoEm}.
+                              </p>
+                            )}
+                            {pedido.status === "conferido" && (
+                              <p className="daddus-muted">{aQuemCabe(pedido, regras, impedimentoDe(pedido))}</p>
                             )}
                             {pedido.decididoEm && (
                               <p className="daddus-muted">
@@ -262,6 +310,35 @@ export function PaginaPedidos({
       )}
     </AppShell>
   );
+}
+
+/**
+ * Quem tem de dar o autorizo neste pedido. Aparece para todo mundo, e nao so
+ * para quem decide: a secretaria que pediu precisa saber em que mesa o pedido
+ * esta parado, senao cobra o Setor de Compras por uma decisao que nao e dele.
+ */
+function aQuemCabe(pedido: Pedido, regras: RegrasAutorizacao, impedimento: ReturnType<typeof impedimentoParaAutorizar>) {
+  if (!impedimento) return "Esperando a sua autorizacao.";
+  const valor = valorDoPedido(pedido);
+  const dono = alcadaDoPedido(valor, regras.limiteAutorizacao) === "gabinete"
+    ? `o Gabinete do Prefeito — ${money(valor)} passa da alcada de ${money(regras.limiteAutorizacao ?? 0)}`
+    : `o ordenador da secretaria ${pedido.secretariaNome}`;
+  return impedimento === "mesma-pessoa"
+    ? `Autoriza ${dono}. ${impedimentoLabels["mesma-pessoa"]}`
+    : `Autoriza ${dono}.`;
+}
+
+/** O que esta tela e para quem abriu ela. */
+function explicacaoDoPapel(sessao: Sessao, confere: boolean, regras: RegrasAutorizacao) {
+  if (confere) return "Confira saldo, vigencia e itens de cada pedido. Autorizar a despesa e do ordenador — secretario da pasta ou gabinete.";
+  const teto = regras.limiteAutorizacao === null ? "" : ` Acima de ${money(regras.limiteAutorizacao)}, a despesa e do gabinete.`;
+  if (sessao.papel === "gabinete") return `A despesa que passa da alcada dos secretarios para aqui.${teto}`;
+  if (sessao.papel === "secretario") {
+    return sessao.ordenador
+      ? `O que a sua secretaria pediu, e o que espera o seu autorizo. Autorizar baixa o saldo do contrato.${teto}`
+      : "O que a sua secretaria pediu dentro dos contratos da prefeitura.";
+  }
+  return "Cada pedido autorizado baixa o saldo do contrato. Recusa, devolucao e estorno exigem motivo.";
 }
 
 /** Duas linhas por pedido (a da tabela e a do detalhe) precisam de um pai so. */

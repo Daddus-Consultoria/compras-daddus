@@ -1,4 +1,4 @@
-export const papeis = ["superadmin", "admin", "compras", "cpl", "secretario", "gestor"] as const;
+export const papeis = ["superadmin", "admin", "compras", "cpl", "secretario", "gabinete", "gestor"] as const;
 
 export type Papel = (typeof papeis)[number];
 
@@ -8,22 +8,24 @@ export const papelLabels: Record<Papel, string> = {
   compras: "Setor de Compras",
   cpl: "Comissao Permanente de Licitacao",
   secretario: "Secretario",
+  gabinete: "Gabinete do Prefeito",
   gestor: "Gestor",
 };
 
 export const papelDescricoes: Record<Papel, string> = {
   superadmin: "Equipe Daddus. Cria prefeituras e usuarios de qualquer municipio.",
   admin: "Cria e desativa usuarios da propria prefeitura e edita os dados institucionais.",
-  compras: "Monta processos, lotes e cotacoes da prefeitura, cadastra os contratos e autoriza os pedidos de fornecimento.",
+  compras: "Monta processos, lotes e cotacoes da prefeitura, cadastra os contratos e confere os pedidos de fornecimento antes do ordenador.",
   cpl: "Recebe o mapa de precos, registra a tramitacao e devolve o processo com o contrato.",
-  secretario: "Abre solicitacoes, preenche a quantidade da propria secretaria e pede fornecimento nos contratos.",
+  secretario: "Abre solicitacoes, preenche a quantidade da propria secretaria e pede fornecimento nos contratos. Marcado como ordenador, autoriza a despesa da propria pasta.",
+  gabinete: "Ordenador geral. Autoriza a despesa que passa da alcada dos secretarios e acompanha a prefeitura inteira.",
   gestor: "Acompanha processos, contratos e saldos sem editar.",
 };
 
 /** Papeis que um usuario pode criar. Superadmin cria qualquer um; admin, ninguem acima dele. */
 export function papeisQuePodeCriar(papel: Papel): Papel[] {
-  if (papel === "superadmin") return ["admin", "compras", "cpl", "secretario", "gestor"];
-  if (papel === "admin") return ["compras", "cpl", "secretario", "gestor"];
+  if (papel === "superadmin") return ["admin", "compras", "cpl", "secretario", "gabinete", "gestor"];
+  if (papel === "admin") return ["compras", "cpl", "secretario", "gabinete", "gestor"];
   return [];
 }
 
@@ -96,15 +98,28 @@ export function podeVerContratos(papel: Papel) {
 /**
  * Pedir fornecimento e da secretaria, que e quem sabe o que falta. O Setor de
  * Compras tambem abre, indicando a secretaria, para o pedido que chega fora do
- * portal — mas nunca no lugar de autorizar sozinho: sao dois atos separados.
+ * portal — mas nunca no lugar de autorizar: sao atos separados.
  */
 export function podeAbrirPedido(papel: Papel) {
   return papel === "secretario" || papel === "compras";
 }
 
-/** Autorizar, recusar e estornar sao do Setor de Compras: e a autorizacao que baixa o saldo. */
-export function podeDecidirPedido(papel: Papel) {
+/**
+ * Conferir e devolver sao do Setor de Compras: saldo, vigencia e item do
+ * contrato. E instrucao, nao decisao — o "autorizo" e do ordenador.
+ */
+export function podeConferirPedido(papel: Papel) {
   return papel === "compras";
+}
+
+/**
+ * Quem pode ser designado ordenador de despesa. O papel apenas admite a
+ * designacao; quem de fato autoriza e o usuario com a marca `ordenador`, e a
+ * regra do pedido esta em `impedimentoParaAutorizar` (lib/pedidos), porque
+ * depende tambem do valor e da secretaria.
+ */
+export function podeSerOrdenador(papel: Papel) {
+  return papel === "secretario" || papel === "gabinete";
 }
 
 export function podeVerPedidos(papel: Papel) {
@@ -116,5 +131,6 @@ export function paginaInicial(papel: Papel) {
   if (papel === "admin") return "/painel/prefeitura";
   if (papel === "cpl") return "/painel/cpl";
   if (papel === "secretario") return "/painel/secretario/solicitacoes";
+  if (papel === "gabinete") return "/painel/compras/pedidos";
   return "/painel/compras";
 }

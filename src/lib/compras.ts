@@ -136,6 +136,19 @@ export type PrefeituraConfig = {
   enderecoCompras: string;
 };
 
+/**
+ * Regras de autorizacao da despesa, decididas por prefeitura porque a
+ * delegacao de ordenacao vem de decreto e cada municipio delega diferente.
+ * Ficam fora de PrefeituraConfig de proposito: aquilo e o cabecalho dos
+ * documentos, isto e regra de fluxo.
+ */
+export type RegrasAutorizacao = {
+  /** Teto do secretario para autorizar, em reais. Nulo = sem teto. */
+  limiteAutorizacao: number | null;
+  /** Quando ligada, quem abre o pedido nao o autoriza. */
+  exigeOrdenadorDistinto: boolean;
+};
+
 /** Os valores sao os mesmos do enum processo_status no banco. */
 export type ProcessoStatus =
   | "em_montagem"

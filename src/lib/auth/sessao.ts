@@ -15,6 +15,8 @@ export type Sessao = {
   prefeituraNome: string | null;
   secretariaId: number | null;
   secretariaChave: Secretaria | null;
+  /** Designado ordenador de despesa: e quem autoriza o pedido de fornecimento. */
+  ordenador: boolean;
   precisaTrocarSenha: boolean;
   demonstracao: boolean;
 };
@@ -37,6 +39,7 @@ const sessaoDemonstracao: Sessao = {
   prefeituraNome: "Prefeitura de Nova Esperanca",
   secretariaId: null,
   secretariaChave: "administracao",
+  ordenador: false,
   precisaTrocarSenha: false,
   demonstracao: true,
 };
@@ -59,6 +62,7 @@ export async function obterSessao(): Promise<Sessao | null> {
     prefeituraNome: usuario.prefeituraNome,
     secretariaId: usuario.secretariaId,
     secretariaChave: usuario.secretariaChave,
+    ordenador: usuario.ordenador,
     precisaTrocarSenha: usuario.precisaTrocarSenha,
     demonstracao: false,
   };

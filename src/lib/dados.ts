@@ -1,4 +1,4 @@
-import { demoProcessos, findProcesso, secretariasDemo } from "@/lib/compras";
+import { demoProcessos, findProcesso, secretariasDemo, type RegrasAutorizacao } from "@/lib/compras";
 import { modoDemonstracao } from "@/lib/auth/sessao";
 import { acharContratoDemo, contratosDemo } from "@/lib/contratos";
 import { lerContrato, listarContratos } from "@/lib/repositorio/contratos";
@@ -8,6 +8,7 @@ import { pedidosDemo, saldoDemo, totalContratado, totalExecutado } from "@/lib/p
 import { dfdDoProcesso, lerDfd, listarDfds } from "@/lib/repositorio/dfd";
 import { lerEtp, situacaoDosEtps } from "@/lib/repositorio/etp";
 import { listarPedidos, resumoDeSaldos, saldoDoContrato, type ResumoSaldo } from "@/lib/repositorio/pedidos";
+import { regrasDeAutorizacao } from "@/lib/repositorio/prefeituras";
 import { lerProcesso, listarProcessos } from "@/lib/repositorio/processos";
 import { listarSecretarias } from "@/lib/repositorio/secretarias";
 
@@ -99,6 +100,22 @@ export async function obterPedidos(
     };
   } catch {
     return { origem: "memoria" as OrigemDados, pedidos: filtrarDemo() };
+  }
+}
+
+/**
+ * As regras de autorizacao da prefeitura da sessao. Sem banco, o padrao do
+ * codigo: secretario sem teto e ordenador distinto exigido — que e o que a
+ * migracao grava numa prefeitura nova.
+ */
+export async function obterRegrasDeAutorizacao(prefeituraId: number | null): Promise<RegrasAutorizacao> {
+  const padrao: RegrasAutorizacao = { limiteAutorizacao: null, exigeOrdenadorDistinto: true };
+  if (modoDemonstracao() || prefeituraId === null) return padrao;
+  try {
+    const regras = await regrasDeAutorizacao(prefeituraId);
+    return { limiteAutorizacao: regras.limite, exigeOrdenadorDistinto: regras.exigeOrdenadorDistinto };
+  } catch {
+    return padrao;
   }
 }
 

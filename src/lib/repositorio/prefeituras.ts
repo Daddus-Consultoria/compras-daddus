@@ -9,6 +9,10 @@ export type Prefeitura = {
   cnpj: string;
   enderecoCompras: string;
   logoUrl: string;
+  /** Teto do secretario para autorizar despesa. Nulo = sem teto. */
+  limiteAutorizacao: number | null;
+  /** Quando ligada, quem abre o pedido nao o autoriza. */
+  exigeOrdenadorDistinto: boolean;
   ativa: boolean;
   usuarios: number;
   processos: number;
@@ -22,6 +26,8 @@ type LinhaPrefeitura = {
   cnpj: string;
   endereco_compras: string;
   logo_mime: string | null;
+  limite_autorizacao: string | null;
+  exige_ordenador_distinto: boolean;
   ativa: boolean;
   atualizado_em: Date;
   usuarios: string;
@@ -29,7 +35,8 @@ type LinhaPrefeitura = {
 };
 
 const selecao = `
-  select p.id, p.slug, p.nome, p.estado, p.cnpj, p.endereco_compras, p.logo_mime, p.ativa, p.atualizado_em,
+  select p.id, p.slug, p.nome, p.estado, p.cnpj, p.endereco_compras, p.logo_mime,
+         p.limite_autorizacao, p.exige_ordenador_distinto, p.ativa, p.atualizado_em,
          (select count(*) from usuarios u where u.prefeitura_id = p.id) as usuarios,
          (select count(*) from processos_compra pr where pr.prefeitura_id = p.id) as processos
   from prefeituras p`;
@@ -44,6 +51,8 @@ function paraPrefeitura(linha: LinhaPrefeitura): Prefeitura {
     enderecoCompras: linha.endereco_compras,
     // O sufixo de versao invalida o cache do navegador quando a logo troca.
     logoUrl: linha.logo_mime ? `/api/prefeituras/${linha.id}/logo?v=${linha.atualizado_em.getTime()}` : "",
+    limiteAutorizacao: linha.limite_autorizacao === null ? null : Number(linha.limite_autorizacao),
+    exigeOrdenadorDistinto: linha.exige_ordenador_distinto,
     ativa: linha.ativa,
     usuarios: Number(linha.usuarios),
     processos: Number(linha.processos),
@@ -88,17 +97,46 @@ export async function criarPrefeitura(dados: { nome: string; estado: string; cnp
   });
 }
 
-export async function atualizarPrefeitura(id: number, dados: { estado: string; nome: string; cnpj: string; enderecoCompras: string }, logo: { mime: string; dados: Buffer } | null) {
+export async function atualizarPrefeitura(
+  id: number,
+  dados: {
+    estado: string;
+    nome: string;
+    cnpj: string;
+    enderecoCompras: string;
+    limiteAutorizacao: number | null;
+    exigeOrdenadorDistinto: boolean;
+  },
+  logo: { mime: string; dados: Buffer } | null,
+) {
   const linha = await consultarUm<LinhaPrefeitura>(
     `update prefeituras set estado = $2, nome = $3, cnpj = $4, endereco_compras = $5,
-       logo_mime = coalesce($6, logo_mime), logo_dados = coalesce($7, logo_dados), atualizado_em = now()
+       logo_mime = coalesce($6, logo_mime), logo_dados = coalesce($7, logo_dados),
+       limite_autorizacao = $8, exige_ordenador_distinto = $9, atualizado_em = now()
      where id = $1
-     returning id, slug, nome, estado, cnpj, endereco_compras, logo_mime, ativa, atualizado_em,
+     returning id, slug, nome, estado, cnpj, endereco_compras, logo_mime,
+       limite_autorizacao, exige_ordenador_distinto, ativa, atualizado_em,
        (select count(*) from usuarios u where u.prefeitura_id = prefeituras.id) as usuarios,
        (select count(*) from processos_compra pr where pr.prefeitura_id = prefeituras.id) as processos`,
-    [id, dados.estado, dados.nome, dados.cnpj, dados.enderecoCompras, logo?.mime ?? null, logo?.dados ?? null],
+    [id, dados.estado, dados.nome, dados.cnpj, dados.enderecoCompras, logo?.mime ?? null, logo?.dados ?? null,
+     dados.limiteAutorizacao, dados.exigeOrdenadorDistinto],
   );
   return linha ? paraPrefeitura(linha) : null;
+}
+
+/**
+ * As regras de autorizacao da prefeitura, sozinhas. Toda decisao sobre pedido
+ * as le, entao elas nao viajam junto com a logo em bytes.
+ */
+export async function regrasDeAutorizacao(prefeituraId: number) {
+  const linha = await consultarUm<{ limite_autorizacao: string | null; exige_ordenador_distinto: boolean }>(
+    "select limite_autorizacao, exige_ordenador_distinto from prefeituras where id = $1",
+    [prefeituraId],
+  );
+  return {
+    limite: linha?.limite_autorizacao == null ? null : Number(linha.limite_autorizacao),
+    exigeOrdenadorDistinto: linha?.exige_ordenador_distinto ?? true,
+  };
 }
 
 export async function lerLogo(id: number) {

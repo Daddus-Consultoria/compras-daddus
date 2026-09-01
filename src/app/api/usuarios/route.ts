@@ -1,7 +1,7 @@
-import { papeisQuePodeCriar, podeGerenciarUsuarios, type Papel } from "@/lib/auth/papeis";
+import { papeisQuePodeCriar, papelLabels, podeGerenciarUsuarios, podeSerOrdenador, type Papel } from "@/lib/auth/papeis";
 import { gerarHash, problemaNaSenha } from "@/lib/auth/senha";
 import { modoDemonstracao, obterSessao } from "@/lib/auth/sessao";
-import { criarUsuario, definirAtivo, definirSenha, emailJaUsado, lerUsuario, listarUsuarios } from "@/lib/repositorio/usuarios";
+import { criarUsuario, definirAtivo, definirOrdenador, definirSenha, emailJaUsado, lerUsuario, listarUsuarios } from "@/lib/repositorio/usuarios";
 import { listarSecretarias } from "@/lib/repositorio/secretarias";
 import { NextResponse } from "next/server";
 
@@ -61,9 +61,19 @@ export async function POST(request: Request) {
     }
   }
 
+  // Ordenar despesa e designacao, nao consequencia do perfil: dentro da mesma
+  // secretaria ha quem requisite e ha quem autorize, e os dois sao secretario.
+  const ordenador = corpo.ordenador === true;
+  if (ordenador && !podeSerOrdenador(papel)) {
+    return NextResponse.json(
+      { error: `Ordenador de despesa so pode ser secretario ou gabinete, e nao "${papelLabels[papel]}".` },
+      { status: 400 },
+    );
+  }
+
   try {
     if (await emailJaUsado(email)) return NextResponse.json({ error: "Ja existe um usuario com esse e-mail." }, { status: 409 });
-    const id = await criarUsuario({ email, nome, senhaHash: await gerarHash(senha), papel, prefeituraId, secretariaId });
+    const id = await criarUsuario({ email, nome, senhaHash: await gerarHash(senha), papel, prefeituraId, secretariaId, ordenador });
     return NextResponse.json(await lerUsuario(id), { status: 201 });
   } catch (erro) {
     return NextResponse.json({ error: (erro as Error).message }, { status: 500 });
@@ -94,6 +104,15 @@ export async function PATCH(request: Request) {
   try {
     if (typeof corpo.ativo === "boolean") {
       await definirAtivo(alvo.id, corpo.ativo);
+    }
+    if (typeof corpo.ordenador === "boolean") {
+      if (corpo.ordenador && !podeSerOrdenador(alvo.papel)) {
+        return NextResponse.json(
+          { error: `${papelLabels[alvo.papel]} nao pode ser ordenador de despesa.` },
+          { status: 400 },
+        );
+      }
+      await definirOrdenador(alvo.id, corpo.ordenador);
     }
     if (typeof corpo.novaSenha === "string" && corpo.novaSenha) {
       const problema = problemaNaSenha(corpo.novaSenha);
