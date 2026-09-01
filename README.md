@@ -130,8 +130,10 @@ demonstracao, nao para uso real: os dados somem a cada reinicio.
 | `tramites_cpl` | Recebimento, diligencia e retorno registrados pela comissao |
 | `contratos` | Contrato devolvido pela CPL, com vigencia e valor somado dos itens |
 | `itens_contrato` | Itens efetivamente contratados, com quantidade e preco unitario |
-| `pedidos_fornecimento` | Pedidos das secretarias dentro do contrato, com a conferencia do Setor de Compras e a autorizacao do ordenador |
+| `pedidos_fornecimento` | Pedidos das secretarias dentro do contrato, com a conferencia do Setor de Compras, a nota de empenho e a autorizacao do ordenador |
 | `itens_pedido` | Quantidade pedida de cada item do contrato |
+| `empenhos` | Notas de empenho emitidas pela Financa, por contrato, com valor e numero unico no municipio |
+| `empenho_alteracoes` | Toda correcao de nota e toda troca de vinculo, com a justificativa escrita |
 
 A logo e servida por `GET /api/config-prefeitura/logo`, com um sufixo de versao
 na URL para invalidar o cache do navegador quando ela e trocada.
@@ -159,7 +161,8 @@ Todas rodam no servidor; o navegador nunca recebe a `DATABASE_URL`.
 | `/api/contratos/[numero]` | GET, PATCH, DELETE | Ficha do contrato e a lista de itens contratados |
 | `/api/contratos/[numero]/saldo` | GET | Saldo por item: contratado, autorizado, em analise e o que sobra |
 | `/api/pedidos` | GET, POST | Pedidos de fornecimento; o secretario so enxerga os da propria secretaria |
-| `/api/pedidos/[id]` | GET, PATCH | Conferir, devolver, autorizar, recusar, cancelar ou estornar um pedido |
+| `/api/pedidos/[id]` | GET, PATCH | Conferir, empenhar, trocar a nota, devolver, autorizar, recusar, cancelar ou estornar um pedido |
+| `/api/empenhos` | GET, POST, PATCH | Notas de empenho com o saldo de cada uma; o PATCH exige justificativa |
 | `/api/agenda` | GET, POST, PATCH, DELETE | Agenda pessoal e a nota de acompanhamento |
 | `/api/notificacoes` | GET, POST | Avisos derivados do estado atual e o que ja foi lido |
 
@@ -177,7 +180,7 @@ Toda pessoa entra com o proprio e-mail e enxerga apenas o fluxo do seu perfil.
 | --- | --- | --- |
 | `superadmin` | Todas as prefeituras | Cria prefeituras e usuarios de qualquer municipio |
 | `admin` | Uma prefeitura | Cria e desativa usuarios da propria prefeitura; edita os dados institucionais |
-| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; elabora o ETP; cadastra contratos; confere os pedidos de fornecimento; exporta os PDFs |
+| `compras` | Uma prefeitura | Monta processos, itens e cotacoes; elabora o ETP; cadastra contratos; confere os pedidos de fornecimento e registra a nota de empenho; exporta os PDFs |
 | `cpl` | Uma prefeitura | Recebe o mapa de precos, baixa o DFD e o ETP para instruir a licitacao, registra a tramitacao e devolve o processo com o contrato |
 | `secretario` | Uma secretaria | Formaliza a demanda (DFD), preenche a quantidade da propria secretaria e pede fornecimento nos contratos. Marcado como ordenador, autoriza a despesa da propria pasta |
 | `gabinete` | Uma prefeitura | Ordenador geral: autoriza a despesa acima da alcada dos secretarios e enxerga os pedidos de todas as pastas |
@@ -190,10 +193,10 @@ e o **ordenador**, e nao o Setor de Compras. Na prefeitura quem ordena despesa e
 o prefeito, quase sempre delegado por decreto aos secretarios de pasta; o Setor
 de Compras instrui o pedido, nao decide sobre ele.
 
-O pedido tem tres atos, em tres maos:
+O pedido tem quatro atos:
 
 ```
-abrir (secretaria)  ->  conferir (Compras)  ->  autorizar (ordenador)
+abrir (secretaria)  ->  conferir (Compras)  ->  empenhar (Compras)  ->  autorizar (ordenador)
 ```
 
 - **Ordenador e designacao, nao perfil.** Dentro de uma secretaria ha quem
@@ -212,8 +215,34 @@ abrir (secretaria)  ->  conferir (Compras)  ->  autorizar (ordenador)
   pedido e exige motivo escrito; "recusar" e o "nao" do ordenador sobre a
   despesa. O pedido devolvido sai de circulacao e a secretaria abre outro.
 - O saldo so cai na autorizacao, mas o pedido segura a quantidade desde que
-  nasce: `pendente` e `conferido` contam como "em analise" e nao ficam livres
-  para outra secretaria pedir.
+  nasce: `pendente`, `conferido` e `empenhado` contam como "em analise" e nao
+  ficam livres para outra secretaria pedir.
+
+### A nota de empenho
+
+"E vedada a realizacao de despesa sem previo empenho" (Lei 4.320/64, art. 60),
+entao o empenho vem **antes** da autorizacao: o ordenador so enxerga o que ja
+esta empenhado. Quem emite a nota e a Financa, fora do portal; o Setor de
+Compras registra o numero emitido e amarra o pedido a ele.
+
+- **O empenho e cadastro, nao campo de texto.** Uma nota estimativa cobre varios
+  fornecimentos do mesmo contrato, entao ela tem valor e saldo proprios:
+  `empenhado` reserva, `autorizado` consome, e recusa, cancelamento e estorno
+  devolvem. Como o saldo do contrato, o saldo da nota nao e guardado — e apurado
+  na leitura.
+- **O codigo e unico no municipio.** Duas notas com o mesmo numero sao a mesma
+  nota, ou um erro de digitacao.
+- **A nota fica presa ao contrato** contra o qual foi emitida: a de um contrato
+  nao paga o fornecimento de outro.
+- **Editar exige justificativa escrita**, e a alteracao fica registrada — numero
+  corrigido em silencio e indistinguivel de numero trocado. O valor tambem nao
+  cai abaixo do que os pedidos ja tomaram da nota.
+- **Nota que perdeu todos os pedidos vira alerta** para o Setor de Compras: a
+  despesa nao vai acontecer e o empenho segue comprometendo dotacao ate a
+  Financa anular. A anulacao e ato dela, fora do portal.
+- Pedido ja empenhado nao e mais cancelado pela secretaria: sai por decisao do
+  ordenador, com motivo — senao a nota ficaria sem consumo sem ninguem ter dito
+  por que.
 
 ### Isolamento
 
