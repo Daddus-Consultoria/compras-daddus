@@ -148,8 +148,14 @@ button { font: inherit; }
 .daddus-nova-cotacao input[name="valorUnitario"] { width: 110px; }
 .daddus-nova-cotacao .daddus-campo-data { width: 145px; }
 /* O campo de data do navegador reserva espaco para o icone do calendario; sem
-   largura minima ele espreme a propria data. */
-.daddus-campo-data { min-width: 138px; }
+   largura minima ele espreme a propria data. O cursor de mao e o icone
+   destacado avisam que ali se clica: por padrao o Chrome deixa o indicador
+   apagado num canto, o campo passa por caixa de texto e a data continua sendo
+   digitada. */
+.daddus-campo-data { cursor: pointer; min-width: 138px; }
+.daddus-campo-data::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .55; padding-left: 6px; }
+.daddus-campo-data:hover::-webkit-calendar-picker-indicator, .daddus-campo-data:focus::-webkit-calendar-picker-indicator { opacity: 1; }
+.daddus-campo-data:disabled { cursor: not-allowed; }
 
 .daddus-ajustes { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
 .daddus-ajustes > strong { display: block; font-size: 11px; margin-bottom: 8px; }

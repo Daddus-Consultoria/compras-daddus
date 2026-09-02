@@ -69,6 +69,18 @@ export function CampoData({
           if (!controlado) setInterno(evento.target.value);
           onChange?.(dataIsoParaBr(evento.target.value));
         }}
+        onClick={(evento) => {
+          // Clicar em qualquer ponto do campo abre o calendario, e nao so no
+          // icone da ponta direita. Sem isto o campo parece caixa de texto e a
+          // pessoa continua digitando a data, que e o que ele veio evitar.
+          // `showPicker` exige gesto do usuario e nao existe em todo navegador;
+          // onde faltar, o campo segue funcionando como antes.
+          try {
+            evento.currentTarget.showPicker?.();
+          } catch {
+            // Navegador que recusa abrir o seletor deixa a digitacao no lugar.
+          }
+        }}
       />
       {/* Desabilitado junto com o campo visivel: campo desabilitado nao e
           enviado, que e o que o input de texto fazia antes. */}
