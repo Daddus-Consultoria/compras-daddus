@@ -30,7 +30,11 @@ O repositorio deste projeto deve ser publicado separadamente do repositorio `sit
 4. Adicione o dominio `compras.daddusconsultoria.com` em **Settings > Domains**.
 5. Configure no DNS o registro indicado pela Vercel.
 
-O arquivo `vercel.json` fixa os comandos de instalacao e build do projeto.
+O arquivo `vercel.json` fixa os comandos de instalacao e build do projeto. O
+build aplica as migrations antes de compilar, entao `DATABASE_URL` e
+`SESSION_SECRET` precisam existir no ambiente **Production** do projeto — nao so
+em Runtime. A branch de producao e a de **Settings > Git > Production Branch**:
+se ela nao for a `main`, o portal publicado nao e o codigo que esta na `main`.
 
 ### Railway
 
@@ -99,6 +103,27 @@ npm run db:migrar   # aplica db/migrations/*.sql, uma vez cada
 npm run db:semear   # secretarias, config do municipio e 3 processos de exemplo
 npm run db:resetar  # apaga tudo e recria (nao use em producao)
 ```
+
+Em producao ninguem roda isso na mao: o build da plataforma chama
+`npm run db:migrar-no-deploy` antes de compilar, e o deploy so sai se as
+migrations passarem. E de proposito que uma migration quebrada derrube o deploy
+— o portal no ar contra um schema velho e pior do que o deploy vermelho: a tela
+de login continua respondendo e devolve 500 justamente quando a senha confere.
+
+Esse comando e o `db:migrar` com duas cautelas. Ele nao roda fora de producao,
+porque preview e producao costumam dividir a mesma `DATABASE_URL` e um preview
+de branch nao pode migrar o banco de todo mundo; e ele nao derruba o build
+quando nao ha `DATABASE_URL`, porque ai o portal sobe em demonstracao e faltar
+banco nao e erro de deploy. Dois deploys ao mesmo tempo se resolvem por um
+trinco do proprio Postgres: o segundo espera o primeiro e ja le a lista de
+migrations atualizada.
+
+Uma consequencia a ter em mente ao escrever migration: entre a migration passar
+e o deploy trocar, por alguns segundos o codigo antigo roda contra o schema
+novo. Migration que so acrescenta atravessa essa janela sem barulho; migration
+que remove ou renomeia coluna derruba a versao ainda no ar. Quando o passo for
+destrutivo, vale parti-lo em dois deploys — primeiro o que acrescenta, depois o
+que remove.
 
 Para desenvolver sem depender de um banco na nuvem:
 
