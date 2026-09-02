@@ -226,7 +226,7 @@ IT1=$(json "d[0]['itemContratoId']")
 req educacao POST /api/pedidos "{\"contrato\":\"$CONTRATO\",\"justificativa\":\"Primeira remessa do ano letivo para as escolas.\",\"entregaPrevista\":\"20/09/2026\",\"itens\":[{\"itemContratoId\":$IT1,\"quantidade\":60}]}"
 etapa 201 "educacao pede fornecimento"
 PEDIDO=$(json "d['id']")
-req compras PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar","empenho":"2026NE000431"}'
+req compras PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar"}'
 etapa 403 "o Setor de Compras nao autoriza a despesa"
 req ordenadora PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar"}'
 etapa 409 "pedido sem conferencia nao chega ao ordenador"
@@ -234,6 +234,25 @@ req compras PATCH "/api/pedidos/$PEDIDO" '{"acao":"conferir"}'
 etapa 200 "compras confere saldo, vigencia e itens"
 req educacao PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar"}'
 etapa 403 "secretario que nao e ordenador nao autoriza"
+req ordenadora PATCH "/api/pedidos/$PEDIDO" '{"acao":"autorizar"}'
+etapa 409 "sem empenho previo, nem o ordenador autoriza"
+
+echo
+echo "== 11a. Nota de empenho, antes da autorizacao =="
+req compras POST /api/empenhos "{\"contrato\":\"$CONTRATO\",\"numero\":\"2026NE000431\",\"valor\":\"100000,00\",\"dataEmissao\":\"05/09/2026\",\"observacao\":\"Empenho estimativo do material de expediente.\"}"
+etapa 201 "compras registra a nota emitida pela Financa"
+EMP=$(json "d['id']")
+req compras POST /api/empenhos "{\"contrato\":\"$CONTRATO\",\"numero\":\"2026NE000431\",\"valor\":\"500,00\"}"
+etapa 409 "duas notas com o mesmo codigo sao recusadas"
+req compras POST /api/empenhos "{\"contrato\":\"$CONTRATO\",\"numero\":\"2026NE000900\",\"valor\":\"1,00\"}"
+etapa 201 "nota pequena, para provar o saldo da nota"
+EMP_PEQ=$(json "d['id']")
+req educacao PATCH "/api/pedidos/$PEDIDO" "{\"acao\":\"empenhar\",\"empenhoId\":$EMP}"
+etapa 403 "registrar o empenho no pedido e do Setor de Compras"
+req compras PATCH "/api/pedidos/$PEDIDO" "{\"acao\":\"empenhar\",\"empenhoId\":$EMP_PEQ}"
+etapa 409 "nota sem saldo nao cobre o pedido"
+req compras PATCH "/api/pedidos/$PEDIDO" "{\"acao\":\"empenhar\",\"empenhoId\":$EMP}"
+etapa 200 "compras empenha a despesa do pedido"
 
 req admin PUT /api/config-prefeitura "{\"nome\":\"Prefeitura de Vila Nova\",\"estado\":\"SP\",\"cnpj\":\"11.222.333/0001-44\",\"enderecoCompras\":\"Praca da Matriz, 10 - Centro - Vila Nova/SP\",\"exigeOrdenadorDistinto\":true,\"limiteAutorizacao\":10}"
 etapa 200 "admin fixa a alcada do secretario em R$ 10"
@@ -251,6 +270,8 @@ etapa 201 "educacao abre o segundo pedido"
 PEDIDO2=$(json "d['id']")
 req compras PATCH "/api/pedidos/$PEDIDO2" '{"acao":"conferir"}'
 etapa 200 "compras confere o segundo pedido"
+req compras PATCH "/api/pedidos/$PEDIDO2" "{\"acao\":\"empenhar\",\"empenhoId\":$EMP}"
+etapa 200 "a mesma nota cobre o segundo pedido"
 req ordenadora PATCH "/api/pedidos/$PEDIDO2" '{"acao":"autorizar"}'
 etapa 200 "a ordenadora da pasta autoriza dentro da alcada"
 
@@ -259,6 +280,8 @@ etapa 201 "a ordenadora tambem pode abrir pedido"
 PEDIDO3=$(json "d['id']")
 req compras PATCH "/api/pedidos/$PEDIDO3" '{"acao":"conferir"}'
 etapa 200 "compras confere o pedido da ordenadora"
+req compras PATCH "/api/pedidos/$PEDIDO3" "{\"acao\":\"empenhar\",\"empenhoId\":$EMP}"
+etapa 200 "terceiro pedido na mesma nota"
 req ordenadora PATCH "/api/pedidos/$PEDIDO3" '{"acao":"autorizar"}'
 etapa 403 "quem abriu o pedido nao o autoriza"
 req gabinete PATCH "/api/pedidos/$PEDIDO3" '{"acao":"autorizar"}'
@@ -271,6 +294,22 @@ req compras PATCH "/api/pedidos/$PEDIDO4" '{"acao":"devolver"}'
 etapa 400 "devolver sem motivo escrito e recusado"
 req compras PATCH "/api/pedidos/$PEDIDO4" '{"acao":"devolver","motivo":"Quantidade acima do consumo mensal declarado no DFD."}'
 etapa 200 "compras devolve com motivo, e o pedido sai de circulacao"
+
+echo
+echo "== 11c. A nota de empenho e editavel, nunca em silencio =="
+req compras PATCH /api/empenhos "{\"id\":$EMP,\"numero\":\"2026NE000432\",\"valor\":\"100000,00\"}"
+etapa 400 "corrigir a nota sem justificativa e recusado"
+req compras PATCH /api/empenhos "{\"id\":$EMP,\"numero\":\"2026NE000432\",\"valor\":\"100000,00\",\"motivo\":\"Numero digitado com um digito trocado no lancamento original.\"}"
+etapa 200 "compras corrige o numero com justificativa registrada"
+req compras PATCH /api/empenhos "{\"id\":$EMP,\"numero\":\"2026NE000432\",\"valor\":\"1,00\",\"motivo\":\"Tentativa de reduzir o valor abaixo do que ja foi comprometido.\"}"
+etapa 409 "o valor da nota nao cai abaixo do que ja foi comprometido"
+req compras PATCH "/api/pedidos/$PEDIDO2" "{\"acao\":\"corrigir-empenho\",\"empenhoId\":$EMP_PEQ}"
+etapa 400 "trocar a nota do pedido sem motivo e recusado"
+req ordenadora GET "/api/empenhos?contrato=$(python3 -c "import urllib.parse;print(urllib.parse.quote('$CONTRATO',safe=''))")"
+etapa 200 "a secretaria enxerga as notas do contrato e o saldo delas"
+python3 -c "
+import json; d=json.load(open('/tmp/fluxo.json'))
+print('     notas:', [(n['numero'], n['valor'], n['comprometido'], n['saldo'], n['pedidos']) for n in d])"
 req educacao GET "/api/contratos/$(python3 -c "import urllib.parse;print(urllib.parse.quote('$CONTRATO',safe=''))")/saldo"
 SALDO=$(json "[ (i['contratada'], i['autorizada'], i['saldo']) for i in d ][0]")
 echo "     item 1 (contratada, autorizada, saldo): $SALDO"

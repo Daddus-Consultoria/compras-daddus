@@ -3,6 +3,7 @@ import { cotacoesValidas, minimoDeCotacoes, money, processoStatusLabels, quantid
 import type { Contrato } from "@/lib/contratos";
 import { diasParaVencer } from "@/lib/contratos";
 import type { EtpStatus } from "@/lib/etp";
+import { empenhoOcioso, type Empenho } from "@/lib/empenhos";
 import { alcadaDoPedido, valorDoPedido, type Pedido } from "@/lib/pedidos";
 import type { Solicitacao } from "@/lib/repositorio/solicitacoes";
 import type { Tarefa } from "@/lib/repositorio/tarefas";
@@ -69,6 +70,7 @@ export function montarNotificacoes(dados: {
   solicitacoes: Solicitacao[];
   tarefas: Tarefa[];
   pedidos: Pedido[];
+  empenhos: Empenho[];
   contratos: Contrato[];
   etps: Array<{ processo: string; status: EtpStatus }>;
   lidas: Set<string>;
@@ -174,8 +176,36 @@ export function montarNotificacoes(dados: {
     }
   }
 
-  if (dados.ordenador) {
+  // Conferido e pedido parado esperando a nota: e do Compras registrar o numero
+  // que a Financa emitiu, e enquanto ele nao entra o ordenador nem enxerga.
+  if (ehCompras) {
     for (const pedido of dados.pedidos.filter((item) => item.status === "conferido")) {
+      avisos.push({
+        chave: `pedido-empenho:${pedido.id}`,
+        titulo: `Pedido ${pedido.numero} conferido, sem empenho`,
+        detalhe: `${pedido.secretariaNome} · contrato ${pedido.contrato} · ${money(valorDoPedido(pedido))}`,
+        href: "/painel/compras/pedidos",
+        tom: "aviso",
+        quando: pedido.conferidoEm ?? pedido.criadoEm,
+      });
+    }
+
+    // Nota que teve pedido e ficou sem nenhum: a despesa nao vai acontecer e o
+    // empenho segue comprometendo dotacao ate a Financa anular.
+    for (const empenho of dados.empenhos.filter(empenhoOcioso)) {
+      avisos.push({
+        chave: `empenho-ocioso:${empenho.id}`,
+        titulo: `Empenho ${empenho.numero} ficou sem consumo`,
+        detalhe: `Contrato ${empenho.contrato} · ${money(empenho.valor)} — peca a anulacao a Financa.`,
+        href: "/painel/compras/pedidos",
+        tom: "alerta",
+        quando: empenho.registradoEm,
+      });
+    }
+  }
+
+  if (dados.ordenador) {
+    for (const pedido of dados.pedidos.filter((item) => item.status === "empenhado")) {
       const alcada = alcadaDoPedido(valorDoPedido(pedido), dados.limiteAutorizacao);
       // O secretario e cobrado do que cabe na alcada dele; o gabinete, do que
       // passou dela. Fora disso o aviso seria de um pedido que a pessoa abre e
@@ -187,7 +217,7 @@ export function montarNotificacoes(dados: {
       avisos.push({
         chave: `pedido-autorizar:${pedido.id}`,
         titulo: `Pedido ${pedido.numero} aguardando a sua autorizacao`,
-        detalhe: `${pedido.secretariaNome} · contrato ${pedido.contrato} · ${money(valorDoPedido(pedido))}`,
+        detalhe: `${pedido.secretariaNome} · empenho ${pedido.empenho} · ${money(valorDoPedido(pedido))}`,
         href: "/painel/compras/pedidos",
         tom: "aviso",
         quando: pedido.conferidoEm ?? pedido.criadoEm,

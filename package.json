@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:migrar": "node --env-file-if-exists=.env.local scripts/db.mjs migrar",
+    "db:migrar-no-deploy": "node scripts/db.mjs no-deploy",
     "db:resetar": "node --env-file-if-exists=.env.local scripts/db.mjs resetar",
     "db:semear": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/semear.mjs",
     "verificar": "bash scripts/fluxo.sh",

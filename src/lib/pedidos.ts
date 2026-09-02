@@ -3,9 +3,11 @@ import type { Contrato, ItemContrato } from "@/lib/contratos";
 import { contratosDemo } from "@/lib/contratos";
 
 /**
- * Execucao do contrato, em tres atos e tres maos: a secretaria pede, o Setor de
- * Compras confere, o ordenador autoriza. E a autorizacao que baixa o saldo,
- * porque autorizar despesa e ato do ordenador — o Compras instrui.
+ * Execucao do contrato, em quatro atos: a secretaria pede, o Setor de Compras
+ * confere, a despesa e empenhada e so entao o ordenador autoriza. E a
+ * autorizacao que baixa o saldo, porque autorizar despesa e ato do ordenador —
+ * o Compras instrui. O empenho vem antes dela porque "e vedada a realizacao de
+ * despesa sem previo empenho" (Lei 4.320/64, art. 60).
  *
  * Nenhum numero de saldo e guardado. Saldo e sempre "o que foi contratado menos
  * o que foi autorizado", apurado na leitura — assim ele nao tem como divergir
@@ -13,11 +15,12 @@ import { contratosDemo } from "@/lib/contratos";
  */
 
 /** Os valores sao os mesmos do enum pedido_status no banco. */
-export type PedidoStatus = "pendente" | "conferido" | "autorizado" | "recusado" | "cancelado" | "estornado";
+export type PedidoStatus = "pendente" | "conferido" | "empenhado" | "autorizado" | "recusado" | "cancelado" | "estornado";
 
 export const pedidoStatusLabels: Record<PedidoStatus, string> = {
   pendente: "Aguardando conferencia",
-  conferido: "Aguardando autorizacao",
+  conferido: "Aguardando empenho",
+  empenhado: "Aguardando autorizacao",
   autorizado: "Autorizado",
   recusado: "Recusado",
   cancelado: "Cancelado",
@@ -26,21 +29,23 @@ export const pedidoStatusLabels: Record<PedidoStatus, string> = {
 
 export const pedidoStatusDescricoes: Record<PedidoStatus, string> = {
   pendente: "A secretaria pediu; o Setor de Compras ainda nao conferiu. Nao baixa saldo.",
-  conferido: "Saldo e contrato conferidos; esperando o autorizo do ordenador. Nao baixa saldo, mas segura a quantidade.",
+  conferido: "Saldo e contrato conferidos; esperando o numero da nota de empenho. Nao baixa saldo, mas segura a quantidade.",
+  empenhado: "Despesa empenhada; esperando o autorizo do ordenador. Nao baixa saldo do contrato, mas ja compromete o empenho.",
   autorizado: "Fornecimento liberado pelo ordenador. E o unico estado que consome saldo do contrato.",
   recusado: "O ordenador negou a despesa, com motivo registrado.",
   cancelado: "Retirado antes da autorizacao: pela secretaria que pediu, ou devolvido pelo Setor de Compras com motivo.",
   estornado: "Autorizacao desfeita; a quantidade volta ao saldo, com motivo registrado.",
 };
 
-export const pedidoStatusEmOrdem: PedidoStatus[] = ["pendente", "conferido", "autorizado", "recusado", "cancelado", "estornado"];
+export const pedidoStatusEmOrdem: PedidoStatus[] = ["pendente", "conferido", "empenhado", "autorizado", "recusado", "cancelado", "estornado"];
 
 export function pedidoTone(status: PedidoStatus) {
-  if (status === "pendente") return "yellow";
   if (status === "autorizado") return "green";
-  // Conferido e estornado dividem o azul: um e comeco de fila, o outro e
-  // terminal, e o rotulo ao lado ja diz qual dos dois.
-  if (status === "conferido" || status === "estornado") return "blue";
+  // Amarelo enquanto o pedido espera a instrucao (conferencia e empenho); azul
+  // quando o que falta e uma decisao de autoridade. Estornado divide o azul por
+  // falta de tom proprio, e o rotulo ao lado diz qual dos dois e.
+  if (status === "pendente" || status === "conferido") return "yellow";
+  if (status === "empenhado" || status === "estornado") return "blue";
   return "gray";
 }
 
@@ -56,7 +61,7 @@ export function consomeSaldo(status: PedidoStatus) {
  * secretarias tomariam o mesmo saldo.
  */
 export function reservaSaldo(status: PedidoStatus) {
-  return status === "pendente" || status === "conferido";
+  return status === "pendente" || status === "conferido" || status === "empenhado";
 }
 
 export type ItemPedido = {
@@ -81,7 +86,9 @@ export type Pedido = {
   secretariaNome: string;
   justificativa: string;
   status: PedidoStatus;
+  /** Numero da nota de empenho vinculada, vazio enquanto nao ha uma. */
   empenho: string;
+  empenhoId: number | null;
   entregaPrevista: string | null;
   motivoDecisao: string;
   solicitante: string | null;
@@ -185,7 +192,15 @@ export type SaldoItem = {
   disponivel: number;
 };
 
-export type AcaoPedido = "conferir" | "devolver" | "autorizar" | "recusar" | "cancelar" | "estornar";
+export type AcaoPedido =
+  | "conferir"
+  | "empenhar"
+  | "corrigir-empenho"
+  | "devolver"
+  | "autorizar"
+  | "recusar"
+  | "cancelar"
+  | "estornar";
 
 /**
  * Cada acao parte de um estado e leva a outro. Recusa, devolucao e estorno
@@ -198,22 +213,35 @@ export type AcaoPedido = "conferir" | "devolver" | "autorizar" | "recusar" | "ca
  * e o estado de quem saiu de circulacao sem decisao sobre a despesa.
  */
 export const acoesDoPedido: Record<AcaoPedido, {
-  destino: PedidoStatus;
+  /** Nulo quando o ato nao move o pedido de estado, so corrige um dado dele. */
+  destino: PedidoStatus | null;
   origens: PedidoStatus[];
   exigeMotivo: boolean;
   label: string;
 }> = {
   conferir: { destino: "conferido", origens: ["pendente"], exigeMotivo: false, label: "Conferir" },
+  empenhar: { destino: "empenhado", origens: ["conferido"], exigeMotivo: false, label: "Empenhar" },
+  "corrigir-empenho": { destino: null, origens: ["empenhado", "autorizado"], exigeMotivo: true, label: "Trocar o empenho" },
   devolver: { destino: "cancelado", origens: ["pendente", "conferido"], exigeMotivo: true, label: "Devolver" },
-  autorizar: { destino: "autorizado", origens: ["conferido"], exigeMotivo: false, label: "Autorizar" },
-  recusar: { destino: "recusado", origens: ["conferido"], exigeMotivo: true, label: "Recusar" },
+  autorizar: { destino: "autorizado", origens: ["empenhado"], exigeMotivo: false, label: "Autorizar" },
+  recusar: { destino: "recusado", origens: ["empenhado"], exigeMotivo: true, label: "Recusar" },
+  // Depois de empenhada, a despesa so sai por decisao registrada: cancelar
+  // deixaria a nota sem consumo sem ninguem ter dito por que.
   cancelar: { destino: "cancelado", origens: ["pendente", "conferido"], exigeMotivo: false, label: "Cancelar" },
   estornar: { destino: "estornado", origens: ["autorizado"], exigeMotivo: true, label: "Estornar" },
 };
 
-/** A conferencia nao decide a despesa: ela nao carimba `decidido_em`. */
+/**
+ * Instruir nao e decidir: conferir, empenhar e corrigir o empenho preparam a
+ * despesa e nao carimbam `decidido_em`. Quem decide e o ordenador.
+ */
 export function ehDecisao(acao: AcaoPedido) {
-  return acao !== "conferir";
+  return acao !== "conferir" && acao !== "empenhar" && acao !== "corrigir-empenho";
+}
+
+/** Atos que mexem no vinculo com a nota de empenho. */
+export function mexeNoEmpenho(acao: AcaoPedido) {
+  return acao === "empenhar" || acao === "corrigir-empenho";
 }
 
 /**
@@ -223,12 +251,16 @@ export function ehDecisao(acao: AcaoPedido) {
  */
 export type ContextoDeAcao = {
   confere: boolean;
+  /** Registra o numero da nota emitida pela Financa. Hoje, o mesmo Compras. */
+  empenha: boolean;
   autoriza: boolean;
   daPropriaSecretaria: boolean;
 };
 
 const donoDaAcao: Record<AcaoPedido, (contexto: ContextoDeAcao) => boolean> = {
   conferir: (contexto) => contexto.confere,
+  empenhar: (contexto) => contexto.empenha,
+  "corrigir-empenho": (contexto) => contexto.empenha,
   devolver: (contexto) => contexto.confere,
   autorizar: (contexto) => contexto.autoriza,
   recusar: (contexto) => contexto.autoriza,
@@ -321,6 +353,7 @@ export const pedidosDemo: Pedido[] = [
     justificativa: "Reposicao do almoxarifado das escolas para o segundo semestre.",
     status: "autorizado",
     empenho: "2026NE000431",
+    empenhoId: 1,
     entregaPrevista: "12/09/2026",
     motivoDecisao: "",
     solicitante: "Helena Braga",
@@ -343,8 +376,9 @@ export const pedidosDemo: Pedido[] = [
     secretaria: "saude",
     secretariaNome: "Saude",
     justificativa: "Material de expediente das unidades basicas de saude.",
-    status: "conferido",
-    empenho: "",
+    status: "empenhado",
+    empenho: "2026NE000431",
+    empenhoId: 1,
     entregaPrevista: null,
     motivoDecisao: "",
     solicitante: "Paulo Nery",

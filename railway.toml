@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm run build"
+buildCommand = "npm run db:migrar-no-deploy && npm run build"
 
 [deploy]
 startCommand = "npm run start"
