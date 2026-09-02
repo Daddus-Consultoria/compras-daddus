@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoCnpj } from "@/components/compras/CampoCnpj";
 import { AppShell } from "@/components/compras/AppShell";
 import type { Sessao } from "@/lib/auth/sessao";
 import type { Prefeitura } from "@/lib/repositorio/prefeituras";
@@ -91,7 +92,7 @@ export function GestaoPrefeituras({ sessao, prefeituras: iniciais }: { sessao: S
                   {estados.map((estado) => <option key={estado}>{estado}</option>)}
                 </select>
               </label>
-              <label>CNPJ<input name="cnpj" placeholder="00.000.000/0000-00" /></label>
+              <label>CNPJ<CampoCnpj name="cnpj" /></label>
               <label>Endereco do Setor de Compras<input name="enderecoCompras" placeholder="Rua, numero, bairro, cidade - UF" /></label>
             </div>
           </div>

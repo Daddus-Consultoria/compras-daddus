@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoData } from "@/components/compras/CampoData";
 import { AppShell } from "@/components/compras/AppShell";
 import { ExportDfdPDF } from "@/components/compras/ExportDfdPDF";
 import { podeEditarDemanda } from "@/lib/auth/papeis";
@@ -208,8 +209,8 @@ export function FichaDemanda({ dfd, sessao, prefeitura }: { dfd: Dfd; sessao: Se
               </label>
               <label>
                 Data pretendida
-                <input value={campos.dataPretendida} placeholder="DD/MM/AAAA" inputMode="numeric" disabled={!editavel}
-                       onChange={(evento) => mudarCampo("dataPretendida", evento.target.value)} />
+                <CampoData value={campos.dataPretendida} disabled={!editavel}
+                           onChange={(valor) => mudarCampo("dataPretendida", valor)} />
               </label>
             </div>
             <label>

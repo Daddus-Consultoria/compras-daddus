@@ -1,7 +1,7 @@
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
 import type { ContratoStatus } from "@/lib/contratos";
 import { acoesDoPedido, mexeNoEmpenho, type AcaoPedido, type Pedido, type PedidoStatus, type SaldoItem } from "@/lib/pedidos";
-import { paraDataIso } from "@/lib/repositorio/processos";
+import { dataBrParaIso } from "@/lib/compras";
 
 type LinhaPedido = Omit<Pedido, "itens"> & { itens: Pedido["itens"] };
 
@@ -259,7 +259,7 @@ export async function criarPedido(prefeituraId: number, usuarioId: number | null
              (prefeitura_id, contrato_id, secretaria_id, numero, justificativa, entrega_prevista, criado_por_id)
            values ($1, $2, $3, $4, $5, $6::date, $7)
            returning id`,
-          [prefeituraId, contrato.id, secretaria.id, numero, dados.justificativa, paraDataIso(dados.entregaPrevista), usuarioId],
+          [prefeituraId, contrato.id, secretaria.id, numero, dados.justificativa, dataBrParaIso(dados.entregaPrevista), usuarioId],
         )) as Array<{ id: number }>;
 
         for (const item of dados.itens) {
@@ -413,7 +413,7 @@ export async function decidirPedido(prefeituraId: number, id: number, usuarioId:
            decidido_por_id = $5,
            decidido_em = now()
        where id = $1`,
-      [pedido.id, destino, dados.motivo, paraDataIso(dados.entregaPrevista), usuarioId],
+      [pedido.id, destino, dados.motivo, dataBrParaIso(dados.entregaPrevista), usuarioId],
     );
 
     return { status: destino, secretariaId: pedido.secretaria_id };

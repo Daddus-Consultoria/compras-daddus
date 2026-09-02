@@ -1,7 +1,7 @@
 import type { ProcessoStatus } from "@/lib/compras";
 import { faseDoTramite, origemDoTramite, type Tramite, type TramiteTipo } from "@/lib/contratos";
 import { consultar, emTransacao } from "@/lib/db";
-import { paraDataIso } from "@/lib/repositorio/processos";
+import { dataBrParaIso } from "@/lib/compras";
 
 export async function tramitesDoProcesso(prefeituraId: number, numero: string) {
   return consultar<Tramite>(
@@ -45,7 +45,7 @@ export async function registrarTramite(prefeituraId: number, numero: string, usu
     await executar(
       `insert into tramites_cpl (processo_id, tipo, data_tramite, documento, observacao, usuario_id)
        values ($1, $2::tramite_cpl_tipo, coalesce($3::date, current_date), $4, $5, $6)`,
-      [processo.id, dados.tipo, paraDataIso(dados.data), dados.documento, dados.observacao, usuarioId],
+      [processo.id, dados.tipo, dataBrParaIso(dados.data), dados.documento, dados.observacao, usuarioId],
     );
 
     const destino = faseDoTramite[dados.tipo];

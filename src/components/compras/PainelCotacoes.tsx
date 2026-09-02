@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoData } from "@/components/compras/CampoData";
 import {
   cotacoesDestoantes,
   cotacoesValidas,
@@ -166,7 +167,7 @@ export function PainelCotacoes({
             <input name="documento" placeholder="Link, contrato ou CNPJ" />
           </label>
           <label>Data
-            <input name="dataCotacao" placeholder="DD/MM/AAAA" inputMode="numeric" />
+            <CampoData name="dataCotacao" />
           </label>
           <label>Valor unitario
             <input name="valorUnitario" type="number" step="0.01" min="0.01" required />

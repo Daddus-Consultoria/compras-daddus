@@ -1,5 +1,7 @@
 "use client";
 
+import { CampoCnpj } from "@/components/compras/CampoCnpj";
+import { CampoData } from "@/components/compras/CampoData";
 import { contratoStatusEmOrdem, contratoStatusLabels } from "@/lib/contratos";
 import type { Processo } from "@/lib/compras";
 import { AlertTriangle, Loader2, Plus, X } from "lucide-react";
@@ -34,6 +36,9 @@ export function NovoContrato({
   const router = useRouter();
   const [numero, setNumero] = useState("");
   const [processo, setProcesso] = useState(processoSugerido ?? "");
+  // Guardado so para o fim da vigencia nao poder ser anterior ao inicio. A
+  // regra ja existe na API; aqui ela aparece antes de o formulario ser enviado.
+  const [vigenciaInicio, setVigenciaInicio] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -156,7 +161,7 @@ export function NovoContrato({
             </label>
             <label>
               CNPJ
-              <input name="cnpjFornecedor" placeholder="00.000.000/0001-00" />
+              <CampoCnpj name="cnpjFornecedor" placeholder="00.000.000/0001-00" />
             </label>
           </div>
 
@@ -168,11 +173,11 @@ export function NovoContrato({
           <div className="daddus-modal-linha">
             <label>
               Inicio da vigencia
-              <input name="vigenciaInicio" placeholder="DD/MM/AAAA" inputMode="numeric" />
+              <CampoData name="vigenciaInicio" value={vigenciaInicio} onChange={setVigenciaInicio} />
             </label>
             <label>
               Fim da vigencia
-              <input name="vigenciaFim" placeholder="DD/MM/AAAA" inputMode="numeric" />
+              <CampoData name="vigenciaFim" min={vigenciaInicio} />
             </label>
           </div>
 

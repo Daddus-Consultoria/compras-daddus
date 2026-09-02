@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoData } from "@/components/compras/CampoData";
 import type { Processo } from "@/lib/compras";
 import type { Tarefa } from "@/lib/repositorio/tarefas";
 import { AlertTriangle, CalendarClock, Check, CheckCircle2, Loader2, Plus, Trash2 } from "lucide-react";
@@ -224,7 +225,7 @@ export function AgendaPessoal({ processos }: { processos: Processo[] }) {
       <form className="daddus-nova-tarefa" onSubmit={adicionar}>
         <input name="descricao" placeholder="Nova tarefa" required disabled={somenteLeitura} aria-label="Descricao da tarefa" />
         <div>
-          <input name="dataPrazo" placeholder="DD/MM/AAAA" inputMode="numeric" disabled={somenteLeitura} aria-label="Prazo da tarefa" />
+          <CampoData name="dataPrazo" disabled={somenteLeitura} aria-label="Prazo da tarefa" />
           <select name="processo" defaultValue="" disabled={somenteLeitura} aria-label="Processo vinculado">
             <option value="">Sem processo</option>
             {processos.map((processo) => (

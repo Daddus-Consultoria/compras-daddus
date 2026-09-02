@@ -1,3 +1,4 @@
+import { dataBrParaIso } from "@/lib/compras";
 import { consultar, consultarUm } from "@/lib/db";
 
 export type Tarefa = {
@@ -36,15 +37,6 @@ function paraTarefa(linha: LinhaTarefa): Tarefa {
   };
 }
 
-/** "12/08/2026" -> "2026-08-12"; qualquer outra coisa vira nulo. */
-function paraDataIso(valor: string | null) {
-  if (!valor) return null;
-  const partes = valor.split("/");
-  if (partes.length !== 3) return null;
-  const [dia, mes, ano] = partes;
-  return `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
-}
-
 /**
  * Resolve o processo pelo numero dentro da propria prefeitura: e o que impede
  * vincular uma tarefa a um processo de outro municipio.
@@ -80,7 +72,7 @@ export async function criarTarefa(dados: {
   const linha = await consultarUm<{ id: number }>(
     `insert into tarefas_processo (usuario_id, processo_id, descricao, data_prazo, comentarios)
      values ($1, $2, $3, $4, $5) returning id`,
-    [dados.usuarioId, processoId, dados.descricao, paraDataIso(dados.dataPrazo), dados.comentarios],
+    [dados.usuarioId, processoId, dados.descricao, dataBrParaIso(dados.dataPrazo), dados.comentarios],
   );
   const criada = await consultarUm<LinhaTarefa>(`${selecao} where t.id = $1`, [linha!.id]);
   return paraTarefa(criada as LinhaTarefa);
@@ -104,7 +96,7 @@ export async function atualizarTarefa(
       usuarioId,
       dados.descricao ?? null,
       dados.dataPrazo !== undefined,
-      dados.dataPrazo ? paraDataIso(dados.dataPrazo) : null,
+      dados.dataPrazo ? dataBrParaIso(dados.dataPrazo) : null,
       dados.concluida ?? null,
       dados.comentarios ?? null,
     ],

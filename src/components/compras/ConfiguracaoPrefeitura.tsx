@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoCnpj } from "@/components/compras/CampoCnpj";
 import { AppShell } from "@/components/compras/AppShell";
 import { podeEditarConfigPrefeitura } from "@/lib/auth/papeis";
 import type { Sessao } from "@/lib/auth/sessao";
@@ -154,7 +155,7 @@ export function ConfiguracaoPrefeitura({ sessao, secretarias: secretariasIniciai
                   <input value={config.nome} disabled={!podeEditar} onChange={(event) => update("nome", event.target.value)} required />
                 </label>
                 <label>CNPJ
-                  <input value={config.cnpj} disabled={!podeEditar} onChange={(event) => update("cnpj", event.target.value)} placeholder="00.000.000/0000-00" required />
+                  <CampoCnpj value={config.cnpj} disabled={!podeEditar} onChange={(valor) => update("cnpj", valor)} required />
                 </label>
                 <label className="span-2">Endereco do Setor de Compras
                   <input value={config.enderecoCompras} disabled={!podeEditar} onChange={(event) => update("enderecoCompras", event.target.value)} placeholder="Rua, numero, bairro, cidade - UF" required />

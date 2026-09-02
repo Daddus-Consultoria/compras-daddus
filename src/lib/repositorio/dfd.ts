@@ -1,7 +1,7 @@
 import type { SolicitacaoStatus } from "@/lib/compras";
 import type { Dfd, FonteImportacao, ItemDemanda, ItemImportado, Prioridade, TipoFonte } from "@/lib/dfd";
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
-import { paraDataIso } from "@/lib/repositorio/processos";
+import { dataBrParaIso } from "@/lib/compras";
 
 type LinhaDfd = Omit<Dfd, "itens"> & { itens: ItemDemanda[] };
 
@@ -109,7 +109,7 @@ export async function criarDfd(
            returning id`,
           [
             prefeituraId, numero, dados.objeto, dados.justificativa, linhaSecretaria.id, usuarioId,
-            dados.prioridade, paraDataIso(dados.dataPretendida), dados.previsaoPca,
+            dados.prioridade, dataBrParaIso(dados.dataPretendida), dados.previsaoPca,
             dados.resultados, dados.vinculacao, dados.responsavel, dados.origemItens,
           ],
         )) as Array<{ id: number }>;
@@ -166,7 +166,7 @@ export async function atualizarDfd(prefeituraId: number, numero: string, dados: 
               responsavel = $9, origem_itens = $10
        where id = $1`,
       [
-        dfd.id, dados.objeto, dados.justificativa, dados.prioridade, paraDataIso(dados.dataPretendida),
+        dfd.id, dados.objeto, dados.justificativa, dados.prioridade, dataBrParaIso(dados.dataPretendida),
         dados.previsaoPca, dados.resultados, dados.vinculacao, dados.responsavel, dados.origemItens,
       ],
     );
