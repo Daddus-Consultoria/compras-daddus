@@ -128,6 +128,45 @@ export function dataBrValida(valor: string) {
   return data.getFullYear() === ano && data.getMonth() === mes - 1 && data.getDate() === dia;
 }
 
+/**
+ * As duas pontas da mesma data.
+ *
+ * O portal fala "DD/MM/AAAA" de ponta a ponta: e o que a API valida, o que a
+ * tela mostra, o que o CSV entrega e o que a contagem de prazo le. O Postgres e
+ * o campo de data do navegador falam ISO. A traducao mora aqui, e nao em cada
+ * formulario, para nao virar uma familia de conversores levemente diferentes.
+ */
+
+/** "12/08/2026" -> "2026-08-12"; qualquer outra coisa vira nulo. */
+export function dataBrParaIso(valor: string | null) {
+  if (!valor) return null;
+  const partes = valor.split("/");
+  if (partes.length !== 3) return null;
+  const [dia, mes, ano] = partes;
+  return `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
+}
+
+/** "2026-08-12" -> "12/08/2026"; qualquer outra coisa vira vazio. */
+export function dataIsoParaBr(valor: string) {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : "";
+}
+
+/**
+ * Poe a pontuacao do CNPJ nos digitos que ja foram escritos, sem esperar os
+ * catorze. O campo e guardado pontuado porque e assim que ele aparece no
+ * contrato, na tela e no PDF; a mascara existe para que o mesmo CNPJ nao seja
+ * gravado de quatro jeitos diferentes conforme quem digitou.
+ */
+export function formatarCnpj(valor: string) {
+  const digitos = valor.replace(/\D/g, "").slice(0, 14);
+  return digitos
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+}
+
 export type PrefeituraConfig = {
   estado: string;
   nome: string;

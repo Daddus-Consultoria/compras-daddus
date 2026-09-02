@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoData } from "@/components/compras/CampoData";
 import type { SecretariaInfo } from "@/lib/compras";
 import { AlertTriangle, Loader2, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -125,7 +126,7 @@ export function NovoProcesso({
           <div className="daddus-modal-linha">
             <label>
               Prazo limite
-              <input name="prazoLimite" placeholder="DD/MM/AAAA" inputMode="numeric" />
+              <CampoData name="prazoLimite" />
             </label>
             <label>
               Secretaria solicitante

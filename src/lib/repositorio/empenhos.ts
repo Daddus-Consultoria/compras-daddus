@@ -1,7 +1,7 @@
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
 import type { ContratoStatus } from "@/lib/contratos";
 import type { DadosEmpenho, Empenho } from "@/lib/empenhos";
-import { paraDataIso } from "@/lib/repositorio/processos";
+import { dataBrParaIso } from "@/lib/compras";
 
 type LinhaEmpenho = {
   id: number;
@@ -99,7 +99,7 @@ export async function criarEmpenho(prefeituraId: number, usuarioId: number | nul
       const [criado] = (await executar(
         `insert into empenhos (prefeitura_id, contrato_id, numero, valor, data_emissao, observacao, registrado_por_id)
          values ($1, $2, $3, $4, $5::date, $6, $7) returning id`,
-        [prefeituraId, contrato.id, dados.numero, dados.valor, paraDataIso(dados.dataEmissao), dados.observacao, usuarioId],
+        [prefeituraId, contrato.id, dados.numero, dados.valor, dataBrParaIso(dados.dataEmissao), dados.observacao, usuarioId],
       )) as Array<{ id: number }>;
       return { id: criado.id };
     });
@@ -154,7 +154,7 @@ export async function atualizarEmpenho(
 
       await executar(
         `update empenhos set numero = $2, valor = $3, data_emissao = $4::date, observacao = $5 where id = $1`,
-        [id, dados.numero, dados.valor, paraDataIso(dados.dataEmissao), dados.observacao],
+        [id, dados.numero, dados.valor, dataBrParaIso(dados.dataEmissao), dados.observacao],
       );
       if (mudancas.length) {
         await executar(

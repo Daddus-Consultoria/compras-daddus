@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoData } from "@/components/compras/CampoData";
 import { money } from "@/lib/compras";
 import { empenhoEsgotado, type Empenho } from "@/lib/empenhos";
 import { valorDoPedido, type Pedido } from "@/lib/pedidos";
@@ -170,7 +171,7 @@ export function EmpenhoDoPedido({
               <div className="daddus-modal-linha">
                 <label>
                   Data de emissao
-                  <input name="dataEmissao" placeholder="DD/MM/AAAA" inputMode="numeric" />
+                  <CampoData name="dataEmissao" />
                 </label>
                 <label>
                   Observacao

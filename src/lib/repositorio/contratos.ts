@@ -1,7 +1,8 @@
 import { precoUnitario, type Processo } from "@/lib/compras";
 import type { Contrato, ContratoStatus, ItemContrato } from "@/lib/contratos";
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
-import { lerProcesso, paraDataIso } from "@/lib/repositorio/processos";
+import { lerProcesso } from "@/lib/repositorio/processos";
+import { dataBrParaIso } from "@/lib/compras";
 
 type LinhaContrato = {
   id: number;
@@ -134,7 +135,7 @@ export async function criarContrato(prefeituraId: number, usuarioId: number | nu
        returning id`,
       [
         prefeituraId, dados.processoNumero, dados.numero, dados.fornecedor, dados.cnpjFornecedor,
-        dados.objeto, paraDataIso(dados.vigenciaInicio), paraDataIso(dados.vigenciaFim),
+        dados.objeto, dataBrParaIso(dados.vigenciaInicio), dataBrParaIso(dados.vigenciaFim),
         dados.documento, dados.status, usuarioId,
       ],
     )) as Array<{ id: number }>;
@@ -190,8 +191,8 @@ export async function atualizarContrato(prefeituraId: number, numero: string, da
     [
       prefeituraId, numero,
       dados.fornecedor ?? null, dados.cnpjFornecedor ?? null, dados.objeto ?? null,
-      dados.vigenciaInicio ? paraDataIso(dados.vigenciaInicio) : null,
-      dados.vigenciaFim ? paraDataIso(dados.vigenciaFim) : null,
+      dados.vigenciaInicio ? dataBrParaIso(dados.vigenciaInicio) : null,
+      dados.vigenciaFim ? dataBrParaIso(dados.vigenciaFim) : null,
       dados.documento ?? null, dados.status ?? null,
     ],
   );

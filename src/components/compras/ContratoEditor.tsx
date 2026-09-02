@@ -1,5 +1,7 @@
 "use client";
 
+import { CampoCnpj } from "@/components/compras/CampoCnpj";
+import { CampoData } from "@/components/compras/CampoData";
 import { AppShell } from "@/components/compras/AppShell";
 import { SaldoDoContrato } from "@/components/compras/SaldoDoContrato";
 import { podeGerenciarContratos } from "@/lib/auth/papeis";
@@ -181,8 +183,8 @@ export function ContratoEditor({
           </label>
           <label>
             CNPJ
-            <input value={campos.cnpjFornecedor} disabled={!editavel} placeholder="00.000.000/0001-00"
-                   onChange={(evento) => mudarCampo("cnpjFornecedor", evento.target.value)} />
+            <CampoCnpj value={campos.cnpjFornecedor} disabled={!editavel} placeholder="00.000.000/0001-00"
+                       onChange={(valor) => mudarCampo("cnpjFornecedor", valor)} />
           </label>
         </div>
         <label>
@@ -192,13 +194,13 @@ export function ContratoEditor({
         <div className="daddus-modal-linha">
           <label>
             Inicio da vigencia
-            <input value={campos.vigenciaInicio} disabled={!editavel} placeholder="DD/MM/AAAA" inputMode="numeric"
-                   onChange={(evento) => mudarCampo("vigenciaInicio", evento.target.value)} />
+            <CampoData value={campos.vigenciaInicio} disabled={!editavel}
+                       onChange={(valor) => mudarCampo("vigenciaInicio", valor)} />
           </label>
           <label>
             Fim da vigencia
-            <input value={campos.vigenciaFim} disabled={!editavel} placeholder="DD/MM/AAAA" inputMode="numeric"
-                   onChange={(evento) => mudarCampo("vigenciaFim", evento.target.value)} />
+            <CampoData value={campos.vigenciaFim} disabled={!editavel} min={campos.vigenciaInicio}
+                       onChange={(valor) => mudarCampo("vigenciaFim", valor)} />
           </label>
         </div>
         <div className="daddus-modal-linha">

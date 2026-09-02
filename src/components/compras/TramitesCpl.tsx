@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoData } from "@/components/compras/CampoData";
 import { podeOperarCpl, type Papel } from "@/lib/auth/papeis";
 import { processoStatusLabels, statusTone, type ProcessoStatus } from "@/lib/compras";
 import { tramiteDescricoes, tramiteLabels, tramitesPermitidos, type Tramite, type TramiteTipo } from "@/lib/contratos";
@@ -109,7 +110,7 @@ export function TramitesCpl({
           </label>
           <label>
             Data
-            <input name="data" placeholder="DD/MM/AAAA" inputMode="numeric" />
+            <CampoData name="data" />
           </label>
           <label>
             Documento

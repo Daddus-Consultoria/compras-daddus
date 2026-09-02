@@ -76,11 +76,37 @@ Na Vercel e no Railway, importe `Daddus-Consultoria/compras-daddus`. Nao importe
 
 - Frontend e rotas: Next.js com App Router
 - Persistencia: PostgreSQL, acessado pelo driver `pg` (sem ORM)
-- Autenticacao: ainda nao implementada
+- Autenticacao: sessao propria, assinada em cookie (ver "Perfis de acesso")
 - Deploy web: Vercel ou Railway, sempre como projeto independente
 
 O navegador nunca fala com o banco. As telas chamam as rotas em `src/app/api/*`,
 que rodam no servidor e sao as unicas donas da `DATABASE_URL`.
+
+### Campos que o navegador ja sabe preencher
+
+Data se escolhe no calendario, e nao se digita: `CampoData` usa o
+`input type="date"`, que traz calendario, teclado, leitor de tela e o seletor
+nativo do celular sem uma linha de codigo nossa. Um calendario proprio custaria
+centenas de linhas para chegar pior no que mais importa, que e conseguir operar
+o campo sem mouse.
+
+O que o componente resolve e a costura de formato. O portal fala `DD/MM/AAAA` de
+ponta a ponta — API, tabela, CSV, contagem de prazo — e o campo do navegador so
+fala ISO. A traducao mora em `dataBrParaIso`/`dataIsoParaBr`, uma vez, e o campo
+visivel nem leva `name`: quem entrega o valor ao formulario e um campo escondido
+ja em `DD/MM/AAAA`. Por isso nenhuma rota de API mudou quando o calendario
+entrou.
+
+`CampoCnpj` pontua o CNPJ enquanto se digita, pelo mesmo motivo pelo qual o
+numero e guardado pontuado: sem mascara o mesmo fornecedor entra de tres jeitos
+diferentes e as duas grafias deixam de se encontrar numa busca. A mascara cuida
+da forma, nao do digito verificador — conferir o digito e outra decisao, porque
+passaria a recusar cadastros que hoje ja estao gravados errados.
+
+Os dois guardam estado proprio, entao escutam o `reset` do formulario
+(`useResetDoFormulario`). Sem isso, a agenda e a cotacao limpariam o formulario
+depois de enviar e deixariam a data anterior no lugar, pronta para ser reenviada
+sem ninguem notar.
 
 ## Banco de dados
 

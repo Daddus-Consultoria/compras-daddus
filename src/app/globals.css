@@ -146,7 +146,10 @@ button { font: inherit; }
 .daddus-nova-cotacao label { color: #55555d; display: flex; flex-direction: column; font-size: 9px; font-weight: 600; gap: 4px; }
 .daddus-nova-cotacao input, .daddus-nova-cotacao select { border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 11px; outline-color: var(--primary); padding: 7px 8px; }
 .daddus-nova-cotacao input[name="valorUnitario"] { width: 110px; }
-.daddus-nova-cotacao input[name="dataCotacao"] { width: 105px; }
+.daddus-nova-cotacao .daddus-campo-data { width: 145px; }
+/* O campo de data do navegador reserva espaco para o icone do calendario; sem
+   largura minima ele espreme a propria data. */
+.daddus-campo-data { min-width: 138px; }
 
 .daddus-ajustes { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
 .daddus-ajustes > strong { display: block; font-size: 11px; margin-bottom: 8px; }

@@ -1,4 +1,4 @@
-import type { AjusteQuantidade, Cotacao, LancamentoSecretaria, LoteItem, MetodoPreco, Processo, ProcessoStatus, Secretaria } from "@/lib/compras";
+import { dataBrParaIso, type AjusteQuantidade, type Cotacao, type LancamentoSecretaria, type LoteItem, type MetodoPreco, type Processo, type ProcessoStatus, type Secretaria } from "@/lib/compras";
 import { consultar, consultarUm, emTransacao } from "@/lib/db";
 
 type LinhaProcesso = {
@@ -321,14 +321,6 @@ type DadosCotacao = {
   justificativa: string;
 };
 
-/** "12/08/2026" -> "2026-08-12"; qualquer outra coisa vira nulo. */
-export function paraDataIso(valor: string | null) {
-  if (!valor) return null;
-  const partes = valor.split("/");
-  if (partes.length !== 3) return null;
-  const [dia, mes, ano] = partes;
-  return `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
-}
 
 /**
  * Confere que o item pertence mesmo a um processo daquela prefeitura antes de
@@ -350,7 +342,7 @@ export async function criarCotacao(prefeituraId: number, numero: string, numeroI
   const linha = await consultarUm<{ id: number }>(
     `insert into cotacoes (item_id, fonte_tipo, descricao, documento, valor_unitario, data_cotacao, desconsiderada, justificativa)
      values ($1, $2::fonte_cotacao, $3, $4, $5, $6, $7, $8) returning id`,
-    [itemId, dados.fonte, dados.descricao, dados.documento, dados.valorUnitario, paraDataIso(dados.dataCotacao), dados.desconsiderada, dados.justificativa],
+    [itemId, dados.fonte, dados.descricao, dados.documento, dados.valorUnitario, dataBrParaIso(dados.dataCotacao), dados.desconsiderada, dados.justificativa],
   );
   await consultar("update processos_compra set atualizado_em = now() where numero_processo = $1 and prefeitura_id = $2", [numero, prefeituraId]);
   return linha?.id ?? null;
@@ -372,7 +364,7 @@ export async function atualizarCotacao(prefeituraId: number, cotacaoId: number, 
     [
       prefeituraId, cotacaoId,
       dados.fonte ?? null, dados.descricao ?? null, dados.documento ?? null,
-      dados.valorUnitario ?? null, dados.dataCotacao ? paraDataIso(dados.dataCotacao) : null,
+      dados.valorUnitario ?? null, dados.dataCotacao ? dataBrParaIso(dados.dataCotacao) : null,
       dados.desconsiderada ?? null, dados.justificativa ?? null,
     ],
   );
@@ -520,7 +512,7 @@ export async function criarProcesso(prefeituraId: number, usuarioId: number | nu
        values ($1, $2, $3, $4, (select id from secretarias where prefeitura_id = $1 and chave = $5), $6)
        on conflict (prefeitura_id, numero_processo) do nothing
        returning id`,
-      [prefeituraId, dados.numero, dados.objeto, paraDataIso(dados.prazoLimite), dados.secretaria, dados.responsavel],
+      [prefeituraId, dados.numero, dados.objeto, dataBrParaIso(dados.prazoLimite), dados.secretaria, dados.responsavel],
     )) as Array<{ id: number }>;
     if (!criado) return { erro: "numero-duplicado" as const };
 

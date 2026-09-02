@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoData } from "@/components/compras/CampoData";
 import type { Sessao } from "@/lib/auth/sessao";
 import { money, nomeCurtoSecretaria, type SecretariaInfo } from "@/lib/compras";
 import type { Contrato } from "@/lib/contratos";
@@ -170,7 +171,7 @@ export function NovoPedido({
 
           <label>
             Entrega prevista
-            <input name="entregaPrevista" placeholder="DD/MM/AAAA" inputMode="numeric" />
+            <CampoData name="entregaPrevista" />
           </label>
 
           <div className="daddus-table-wrap">

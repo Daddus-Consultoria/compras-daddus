@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoData } from "@/components/compras/CampoData";
 import { AppShell } from "@/components/compras/AppShell";
 import { ExportDfdPDF } from "@/components/compras/ExportDfdPDF";
 import { podeAbrirSolicitacao, podeEditarTodasAsColunas } from "@/lib/auth/papeis";
@@ -226,7 +227,7 @@ export function PainelDemandas({
                 </label>
                 <label>
                   Data pretendida para a contratacao
-                  <input name="dataPretendida" placeholder="DD/MM/AAAA" inputMode="numeric" />
+                  <CampoData name="dataPretendida" />
                 </label>
               </div>
               <label>
