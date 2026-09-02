@@ -296,6 +296,15 @@ export async function removerContrato(prefeituraId: number, numero: string) {
     )) as Array<{ total: string }>;
     if (Number(total) > 0) return { erro: "com-pedidos" as const, pedidos: Number(total) };
 
+    // Empenho tambem prende o contrato: a nota foi emitida contra esta despesa,
+    // e apagar o contrato deixaria a nota sem objeto. Sem esta checagem o
+    // `on delete restrict` do banco viraria um erro 500 sem explicacao.
+    const [{ notas }] = (await executar(
+      "select count(*) as notas from empenhos where contrato_id = $1",
+      [contrato.id],
+    )) as Array<{ notas: string }>;
+    if (Number(notas) > 0) return { erro: "com-empenhos" as const, empenhos: Number(notas) };
+
     await executar("delete from contratos where id = $1", [contrato.id]);
     return { ok: true as const };
   });

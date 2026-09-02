@@ -1,6 +1,7 @@
 "use client";
 
 import { money } from "@/lib/compras";
+import { empenhoEsgotado, empenhoOcioso, type Empenho } from "@/lib/empenhos";
 import {
   limiteDeAlerta,
   pedidoStatusLabels,
@@ -28,13 +29,15 @@ function porcentagem(valor: number) {
  * contratado. Por isso a coluna nao tem campo de edicao — corrigir saldo se faz
  * estornando o pedido que o consumiu.
  */
-export function SaldoDoContrato({ saldo, pedidos }: { saldo: SaldoItem[]; pedidos: Pedido[] }) {
+export function SaldoDoContrato({ saldo, pedidos, empenhos }: { saldo: SaldoItem[]; pedidos: Pedido[]; empenhos: Empenho[] }) {
   const contratado = totalContratado(saldo);
   const executado = totalExecutado(saldo);
   const disponivel = totalDoSaldo(saldo);
   const consumo = percentualExecutado(saldo);
   // Pendente e conferido: os dois seguram quantidade sem terem baixado saldo.
   const emAnalise = pedidos.filter((pedido) => reservaSaldo(pedido.status));
+  const empenhado = empenhos.reduce((total, empenho) => total + empenho.valor, 0);
+  const saldoEmpenhado = empenhos.reduce((total, empenho) => total + empenho.saldo, 0);
 
   return (
     <>
@@ -87,6 +90,47 @@ export function SaldoDoContrato({ saldo, pedidos }: { saldo: SaldoItem[]; pedido
               ))}
               {!saldo.length && (
                 <tr><td colSpan={8} className="daddus-empty">Sem itens contratados: o saldo comeca quando o contrato tem itens.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="daddus-editor-toolbar">
+        <div>
+          <strong>Notas de empenho</strong>
+          <span>
+            {empenhos.length} {empenhos.length === 1 ? "nota emitida" : "notas emitidas"} · {money(empenhado)} empenhados,
+            {" "}{money(saldoEmpenhado)} de saldo nas notas
+          </span>
+        </div>
+      </div>
+
+      <div className="daddus-editor-card">
+        <div className="daddus-table-wrap">
+          <table className="daddus-table">
+            <thead>
+              <tr><th>Nota</th><th>Emissao</th><th>Valor</th><th>Comprometido</th><th>Saldo</th><th>Pedidos</th></tr>
+            </thead>
+            <tbody>
+              {empenhos.map((empenho) => (
+                <tr key={empenho.id}>
+                  <td>
+                    <strong>{empenho.numero}</strong>
+                    {empenho.observacao && <small>{empenho.observacao}</small>}
+                  </td>
+                  <td>{empenho.dataEmissao ?? "-"}</td>
+                  <td>{money(empenho.valor)}</td>
+                  <td>{money(empenho.comprometido)}</td>
+                  <td className={empenhoEsgotado(empenho) ? "" : "calculated total"}>{money(empenho.saldo)}</td>
+                  <td>
+                    {empenho.pedidos}
+                    {empenhoOcioso(empenho) && <small>sem consumo: pedir anulacao</small>}
+                  </td>
+                </tr>
+              ))}
+              {!empenhos.length && (
+                <tr><td colSpan={6} className="daddus-empty">Nenhuma nota de empenho registrada neste contrato.</td></tr>
               )}
             </tbody>
           </table>
